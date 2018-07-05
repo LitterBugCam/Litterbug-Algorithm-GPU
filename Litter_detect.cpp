@@ -192,8 +192,8 @@ int main(int argc, char * argv[])
             gray = gray.mul(1.5f);
 
 
-        cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
-        cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
+        //cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
+        //cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
 
 
         if (i == 0)
@@ -311,7 +311,7 @@ int main(int argc, char * argv[])
             cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
             abandoned_objects.populateObjects(frame, i);
 
-            cv::Canny(gray, gray, 30, 30 * 3, 3);
+            // cv::Canny(gray, gray, 30, 30 * 3, 3);
             gray.copyTo(canny.getStorage());
             cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
             cv::cartToPolar(grad_x, grad_y, not_used, angles.getStorage(), false);
