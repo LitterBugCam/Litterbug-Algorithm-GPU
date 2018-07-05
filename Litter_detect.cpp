@@ -187,7 +187,6 @@ int main(int argc, char * argv[])
         image.copyTo(gray);
 
 
-
         if (low_light)
             gray = gray.mul(1.5f);
 
@@ -195,6 +194,8 @@ int main(int argc, char * argv[])
         //cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
         //cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
 
+        image.copyTo(grad_x);
+        image.copyTo(grad_y);
 
         if (i == 0)
         {
