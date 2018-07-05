@@ -57,63 +57,8 @@ const static std::map<std::string, std::function<void(const std::string& src)>> 
 };
 #undef DECLARE_PARAM
 
-#ifdef USE_GPU
-#include "QPULib.h"
-
-//GPU cannot do division, so have to prepare values on CPU
-//Float t0 = (xOld < 1.0f) ? xOld : 1.0f / x;
-void kernel_atan(Int n, Ptr<Float> x, Ptr<Float> t0_p)
-{
-    //https://seblagarde.wordpress.com/2014/12/01/inverse-trigonometric-functions-gpu-optimization-for-amd-gcn-architecture/
-    Int inc = numQPUs() << 4;
-    Ptr<Float> p = x + index() + (me() << 4);
-    Ptr<Float> b = t0_p + index() + (me() << 4);
-    gather(p);
-    gather(b);
-
-    Float xOld;
-    Float res;
-    Float t0;
-    For (Int i = 0, i < n, i = i + inc)
-    gather(p + inc);
-    gather(b + inc);
-    receive(xOld);
-    receive(t0);
-
-    Float t1 = t0 * t0;
-    Float poly = 0.0872929f;
-    poly = -0.301895f + poly * t1;
-    poly = 1.0f + poly * t1;
-    poly = poly * t0;
-
-    Where(xOld < 1.0f)
-    res = poly;
-    End
-
-    Where(xOld >= 1.0f)
-    res = HALF_PI - poly;
-    End
-
-    Where (xOld < 0)
-    res = 0 - res;
-    End
-
-    store(res, p);
-    p = p + inc;
-    End
-
-    // Discard pre-fetched vectors from final iteration
-    receive(xOld);
-}
-
-#endif
-
 int main(int argc, char * argv[])
 {
-#ifdef USE_GPU
-    auto k_atan = compile(kernel_atan);
-    k_atan.setNumQPUs(12); //it has 12 units
-#endif
     using namespace cv;
 
     std::ofstream results;
@@ -183,7 +128,11 @@ int main(int argc, char * argv[])
 
 
 
-    cv::UMat image;
+    cv::Mat image; //current opencl on pi do not handle UMat for images
+    cv::Mat frame;
+
+    cv::UMat gray;
+
     capture >> image;
     if (image.empty())
     {
@@ -209,9 +158,7 @@ int main(int argc, char * argv[])
 
     cv::UMat B_Sx, B_Sy;
     cv::UMat grad_x, grad_y;
-    cv::UMat gray, tmp;
     cv::UMat D_Sx, D_Sy;
-    cv::Mat frame;
     ZeroedArray<uint8_t> canny(0);
     ZeroedArray<uint8_t> object_map(0);
     ZeroedArray<float> angles(0);
@@ -224,8 +171,7 @@ int main(int argc, char * argv[])
 
     for (fullbits_int_t i = 0; !image.empty(); ++i, (capture >> image))
     {
-        const size_t pixels_size    = image.cols * image.rows;
-        const size_t pixels_size_al = pixels_size + (16 - (pixels_size % 16)); //aligned to 16 items for gpu
+        //const size_t pixels_size    = image.cols * image.rows;
 #ifndef NO_FPS
         auto t = static_cast<double>(getTickCount());
 #endif
@@ -237,7 +183,8 @@ int main(int argc, char * argv[])
             resize(image, image, Size(image.cols * resize_scale, image.rows * resize_scale));
 
 
-        cv::cvtColor(image, gray, CV_BGR2GRAY);
+        cv::cvtColor(image, image, CV_BGR2GRAY);
+        image.copyTo(gray);
         cv::blur(gray, gray, Size(3, 3));
 
         if (low_light)
