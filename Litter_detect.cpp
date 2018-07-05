@@ -125,12 +125,15 @@ int main(int argc, char * argv[])
     const auto fps         = std::max(1l, static_cast<long>(capture.get(CV_CAP_PROP_FPS)));
     capture.set(CV_CAP_PROP_BUFFERSIZE, 1);
 
-
-
+    cv::Mat gray;
+#ifndef NO_GUI
     cv::Mat image; //current opencl on pi do not handle UMat for images
+#else
+    cv::Mat& image = gray;
+#endif
     cv::Mat frame;
 
-    cv::UMat gray;
+
 
     capture >> image;
     if (image.empty())
@@ -155,9 +158,9 @@ int main(int argc, char * argv[])
     //however, lets say 1 second of real time video
     objects abandoned_objects(framesCount, fps * std::max(fps_life, 0.01f));
 
-    cv::UMat B_Sx, B_Sy;
-    cv::UMat grad_x, grad_y;
-    cv::UMat D_Sx, D_Sy;
+    cv::Mat B_Sx, B_Sy;
+    cv::Mat grad_x, grad_y;
+    cv::Mat D_Sx, D_Sy;
     ZeroedArray<uint8_t> canny(0);
     ZeroedArray<uint8_t> object_map(0);
     ZeroedArray<float> angles(0);
@@ -181,21 +184,17 @@ int main(int argc, char * argv[])
         if (resize_scale != 1)
             cv::resize(image, image, cv::Size(image.cols * resize_scale, image.rows * resize_scale));
 
+        cv::cvtColor(image, gray, CV_BGR2GRAY);
+        cv::blur(gray, gray, cv::Size(3, 3));
 
-        cv::cvtColor(image, image, CV_BGR2GRAY);
-        cv::blur(image, image, cv::Size(3, 3));
-        image.copyTo(gray);
 
 
         if (low_light)
             gray = gray.mul(1.5f);
 
 
-        //cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
-        //cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
-
-        image.copyTo(grad_x);
-        image.copyTo(grad_y);
+        cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
+        cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
 
         if (i == 0)
         {
@@ -213,44 +212,11 @@ int main(int argc, char * argv[])
             cv::subtract(grad_y, B_Sy, D_Sy);
             cv::add(D_Sy.mul(alpha_S), B_Sy, B_Sy);
 
-            //            D_Sx = grad_x - B_Sx;
-            //            B_Sx = B_Sx + alpha_S * D_Sx;
-
-            //            D_Sy = grad_y - B_Sy;
-            //            B_Sy = B_Sy + alpha_S * D_Sy;
-
-            //            assert(grad_x.isContinuous());
-            //            assert(grad_y.isContinuous());
-            //            auto grad_x_ptr = grad_x.ptr<float>();
-            //            auto grad_y_ptr = grad_y.ptr<float>();
-
             if (i % framemod2 == 0)
             {
                 assert(abandoned_map.isContinuous());
                 auto plain_map_ptr = abandoned_map.ptr<uchar>();
 
-                //                assert(D_Sx.isContinuous());
-                //                assert(D_Sy.isContinuous());
-                //                auto D_Sx_ptr = D_Sx.ptr<float>();
-                //                auto D_Sy_ptr = D_Sy.ptr<float>();
-
-                //                for (size_t k = 0; k < pixels_size; ++k)
-                //                {
-                //                    auto point = plain_map_ptr + k;
-                //                    if (*point) //overflow prot
-                //                        *point -= 1;
-
-                //                    //prevening overflow here
-                //                    //btw original code COULD overflow on whites...
-                //                    if ((std::abs(*(D_Sx_ptr + k)) > fore_th && std::abs(*(grad_x_ptr + k)) > 19) ||
-                //                            (std::abs(*(D_Sy_ptr + k)) > fore_th && std::abs(*(grad_y_ptr + k)) > 19))
-                //                    {
-                //                        if (*point < 254)
-                //                            *point += 2;
-                //                        else
-                //                            *point = 255;
-                //                    }
-                //                }
                 cv::absdiff(D_Sx, cv::Scalar::all(0), D_Sx);
                 cv::absdiff(grad_x, cv::Scalar::all(0), grad_x);
                 cv::absdiff(D_Sy, cv::Scalar::all(0), D_Sy);
@@ -267,10 +233,9 @@ int main(int argc, char * argv[])
                 cv::add(D_Sx, D_Sy, D_Sx);
                 cv::threshold(D_Sx, D_Sx, 1, 2, cv::THRESH_BINARY);
 
-                cv::UMat tmp2;
-                D_Sx.convertTo(tmp2, CV_8UC1);
+                D_Sx.convertTo(frame, CV_8UC1);
                 cv::add(abandoned_map, -1, abandoned_map);
-                cv::add(abandoned_map, tmp2, abandoned_map);
+                cv::add(abandoned_map, frame, abandoned_map);
 
 
                 if (i > frameinit)
@@ -312,8 +277,7 @@ int main(int argc, char * argv[])
             cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
             abandoned_objects.populateObjects(frame, i);
 
-            // cv::Canny(gray, gray, 30, 30 * 3, 3);
-            gray.copyTo(canny.getStorage());
+            cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
             cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
             cv::cartToPolar(grad_x, grad_y, not_used, angles.getStorage(), false);
 
