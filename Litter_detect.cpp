@@ -59,7 +59,6 @@ const static std::map<std::string, std::function<void(const std::string& src)>> 
 
 int main(int argc, char * argv[])
 {
-    using namespace cv;
 
     std::ofstream results;
     results.open ("detected_litters.txt");
@@ -173,26 +172,28 @@ int main(int argc, char * argv[])
     {
         //const size_t pixels_size    = image.cols * image.rows;
 #ifndef NO_FPS
-        auto t = static_cast<double>(getTickCount());
+        auto t = static_cast<double>(cv::getTickCount());
 #endif
         if (i > frameinit) alpha_S = alpha;
         if (i % framemod != 0 && i > frameinit)
             continue;
 
         if (resize_scale != 1)
-            resize(image, image, Size(image.cols * resize_scale, image.rows * resize_scale));
+            cv::resize(image, image, cv::Size(image.cols * resize_scale, image.rows * resize_scale));
 
 
         cv::cvtColor(image, image, CV_BGR2GRAY);
+        cv::blur(image, image, cv::Size(3, 3));
         image.copyTo(gray);
-        cv::blur(gray, gray, Size(3, 3));
+
+
 
         if (low_light)
             gray = gray.mul(1.5f);
 
 
-        cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, BORDER_DEFAULT);
-        cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, BORDER_DEFAULT);
+        cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
+        cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
 
 
         if (i == 0)
@@ -254,18 +255,18 @@ int main(int argc, char * argv[])
                 cv::absdiff(D_Sy, cv::Scalar::all(0), D_Sy);
                 cv::absdiff(grad_y, cv::Scalar::all(0), grad_y);
 
-                cv::threshold(D_Sx, D_Sx, fore_th, 2, THRESH_BINARY);
-                cv::threshold(grad_x, grad_x, 19, 1, THRESH_BINARY);
+                cv::threshold(D_Sx, D_Sx, fore_th, 2, cv::THRESH_BINARY);
+                cv::threshold(grad_x, grad_x, 19, 1, cv::THRESH_BINARY);
                 cv::multiply(D_Sx, grad_x, D_Sx);
 
-                cv::threshold(D_Sy, D_Sy, fore_th, 2, THRESH_BINARY);
-                cv::threshold(grad_y, grad_y, 19, 1, THRESH_BINARY);
+                cv::threshold(D_Sy, D_Sy, fore_th, 2, cv::THRESH_BINARY);
+                cv::threshold(grad_y, grad_y, 19, 1, cv::THRESH_BINARY);
                 cv::multiply(D_Sy, grad_y, D_Sy);
 
                 cv::add(D_Sx, D_Sy, D_Sx);
-                cv::threshold(D_Sx, D_Sx, 1, 2, THRESH_BINARY);
+                cv::threshold(D_Sx, D_Sx, 1, 2, cv::THRESH_BINARY);
 
-                UMat tmp2;
+                cv::UMat tmp2;
                 D_Sx.convertTo(tmp2, CV_8UC1);
                 cv::add(abandoned_map, -1, abandoned_map);
                 cv::add(abandoned_map, tmp2, abandoned_map);
@@ -307,31 +308,13 @@ int main(int argc, char * argv[])
                 }
             }
 
-            threshold(abandoned_map, frame, aotime, 255, THRESH_BINARY);
+            cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
             abandoned_objects.populateObjects(frame, i);
 
             cv::Canny(gray, gray, 30, 30 * 3, 3);
             gray.copyTo(canny.getStorage());
-            threshold(abandoned_map, object_map.getStorage(), aotime2, 255, THRESH_BINARY);
-#ifdef USE_GPU
-            SharedArray<float> yx(pixels_size_al);
-            SharedArray<float> t0(pixels_size_al);
-            angles.resize(image.rows, image.cols);
-            for (size_t k = 0, sz = pixels_size; k < sz; ++k)
-            {
-                //GPU do not have division...
-                *(yx.getPointer() + k) = *(grad_y_ptr + k) / *(grad_x_ptr + k);
-                *(t0.getPointer() + k) = std::abs(*(yx.getPointer() + k));
-                if (!(*(t0.getPointer() + k) < 1.f))
-                    *(t0.getPointer() + k) = 1.f / *(t0.getPointer() + k);
-            }
-
-            k_atan(static_cast<int>(pixels_size), &yx, &t0);
-            for (size_t k = 0, sz = pixels_size; k < sz; ++k)
-                *(angles.ptr() + k) = *(yx.getPointer() + k);
-#else
+            cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
             cv::cartToPolar(grad_x, grad_y, not_used, angles.getStorage(), false);
-#endif
 
 #ifndef NO_GUI
             image.copyTo(frame);
@@ -348,8 +331,8 @@ int main(int argc, char * argv[])
                         atu.extraLife();
                         results << " x: " << params.rr << " y: " << params.cc << " w: " << params.w << " h: " << params.h << std::endl;
 #ifndef NO_GUI
-                        const static Scalar color(0, 0, 255);
-                        rectangle(frame, Rect(atu.origin, atu.endpoint), color, 2);
+                        const static cv::Scalar color(0, 0, 255);
+                        cv::rectangle(frame, cv::Rect(atu.origin, atu.endpoint), color, 2);
 #endif
                     }
                 }
@@ -369,13 +352,13 @@ int main(int argc, char * argv[])
                         1, // Line Thickness
                         CV_AA); // Anti-alias
 
-            imshow("output", frame);//ok,those 2 take around -5 fps on i7
-            waitKey(10);
+            cv::imshow("output", frame);//ok,those 2 take around -5 fps on i7
+            cv::waitKey(10);
 #endif
         }
 
 #ifndef NO_FPS
-        t = ((double) getTickCount() - t) / getTickFrequency();
+        t = ((double) cv::getTickCount() - t) / cv::getTickFrequency();
         meanfps =  (1 / t) + meanfps;
         //print out only with no gui
 #ifdef NO_GUI
