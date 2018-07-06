@@ -188,7 +188,7 @@ void openCl::atan2(cv::Mat &x, cv::Mat &y, cv::Mat &angle)
         cl::Buffer by(queue, py.r_ptr(), py.end(), true, true);
         cl::Buffer ba(queue, pa.w_ptr(), pa.end(), false, true);
         //https://jorudolph.wordpress.com/2012/02/03/opencl-work-item-ids-globalgrouplocal/
-        kernel(cl::EnqueueArgs(queue, cl::NDRange(gpuUsed), cl::NDRange(1)), px.sizeAligned(), bx, by, ba).wait();
+        kernel(cl::EnqueueArgs(queue, cl::NDRange(gpuUsed), cl::NDRange(gpuUsed)), px.sizeAligned(), bx, by, ba).wait();
         cl::copy(ba, pa.w_ptr(), pa.end());
     }
     CATCHCL
@@ -218,7 +218,7 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
         cl::Buffer bby( queue, pby.r_ptr(),   pby.end(),  false, true);
         cl::Buffer bres(queue, pres.r_ptr(),  pres.end(), false, true);
         std::cout << "Ready to call kernel magic...\n";
-        kernel(cl::EnqueueArgs(queue, cl::NDRange(gpuUsed), cl::NDRange(1)), pgx.sizeAligned(), (is_deeper_magic) ? 1 : 0, alpha_s, fore_th, bpgx, bpgy, bbx, bby, bres).wait();
+        kernel(cl::EnqueueArgs(queue, cl::NDRange(gpuUsed), cl::NDRange(gpuUsed)), pgx.sizeAligned(), (is_deeper_magic) ? 1 : 0, alpha_s, fore_th, bpgx, bpgy, bbx, bby, bres).wait();
         std::cout << "Call kernel magic ended...\n";
         cl::copy(bbx,  pbx.w_ptr(),  pbx.end());
         cl::copy(bby,  pby.w_ptr(),  pby.end());
