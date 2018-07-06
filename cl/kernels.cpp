@@ -81,13 +81,15 @@ cl::Program getCompiledKernels()
                const int16 zeros = 0;
                const int16 ones  = 1;
                const int16 twos  = 2;
+               const int16 twos5 = 255;
+
                mr += mult * select(zeros, ones, c2 || c1) * twos;
 
 
-               c1 = mr < 0;
-               c2 = convert_int16(select(mr, convert_int16(0),   c1));//overflow protection
-               c1 = c2 > 255;
-               mr = convert_int16(select(c2, convert_int16(255), c1)); //overflow protection
+               c1 = mr < zeros;
+               c2 = convert_int16(select(mr, zeros, c1));//overflow protection
+               c1 = c2 > twos5;
+               mr = convert_int16(select(c2, twos5, c1)); //overflow protection
 
                vstore16(mr, k, mapRes + offset);
             }
