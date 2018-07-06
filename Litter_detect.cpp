@@ -151,10 +151,8 @@ int main(int argc, char * argv[])
     if (resize_scale != 1)
         resize(image, image, cv::Size(image.cols * resize_scale, image.rows * resize_scale));
 
-    const auto zeroMatrix8U     = cv::Mat::zeros(image.size(), CV_8UC1);
-    const auto ffMatrix8UC3     = cv::Mat::ones(image.size(), CV_8UC3) * 255;
 
-    cv::Mat abandoned_map = zeroMatrix8U;
+
 
 
     const static float alpha_init = 0.01;
@@ -166,7 +164,6 @@ int main(int argc, char * argv[])
 
     cv::Mat B_Sx, B_Sy;
     cv::Mat grad_x, grad_y;
-    cv::Mat D_Sx, D_Sy;
     ZeroedArray<uint8_t> canny(0);
     ZeroedArray<uint8_t> object_map(0);
     ZeroedArray<float> angles(0);
@@ -176,7 +173,7 @@ int main(int argc, char * argv[])
     float meanfps = 0;
 #endif
 
-
+    cv::Mat abandoned_map = cv::Mat(image.rows, image.cols, CV_8UC1, cv::Scalar(0));
     for (fullbits_int_t i = 0; !image.empty(); ++i, (capture >> image))
     {
         //const size_t pixels_size    = image.cols * image.rows;
@@ -212,70 +209,43 @@ int main(int argc, char * argv[])
         }
         else
         {
-            cv::subtract(grad_x, B_Sx, D_Sx);
-            cv::add(D_Sx.mul(alpha_S), B_Sx, B_Sx);
+            const bool is_deeper_magic = (i % framemod2 == 0);
+            cl->magic(is_deeper_magic, alpha_S, fore_th, grad_x, grad_y, B_Sx, B_Sy, abandoned_map);
 
-            cv::subtract(grad_y, B_Sy, D_Sy);
-            cv::add(D_Sy.mul(alpha_S), B_Sy, B_Sy);
-
-            if (i % framemod2 == 0)
+            if (i > frameinit && is_deeper_magic)
             {
                 assert(abandoned_map.isContinuous());
-                auto plain_map_ptr = abandoned_map.ptr<uchar>();
+                auto plain_map_ptr = abandoned_map.ptr<int>();
 
-                cv::absdiff(D_Sx, cv::Scalar::all(0), D_Sx);
-                cv::absdiff(grad_x, cv::Scalar::all(0), grad_x);
-                cv::absdiff(D_Sy, cv::Scalar::all(0), D_Sy);
-                cv::absdiff(grad_y, cv::Scalar::all(0), grad_y);
-
-                cv::threshold(D_Sx, D_Sx, fore_th, 2, cv::THRESH_BINARY);
-                cv::threshold(grad_x, grad_x, 19, 1, cv::THRESH_BINARY);
-                cv::multiply(D_Sx, grad_x, D_Sx);
-
-                cv::threshold(D_Sy, D_Sy, fore_th, 2, cv::THRESH_BINARY);
-                cv::threshold(grad_y, grad_y, 19, 1, cv::THRESH_BINARY);
-                cv::multiply(D_Sy, grad_y, D_Sy);
-
-                cv::add(D_Sx, D_Sy, D_Sx);
-                cv::threshold(D_Sx, D_Sx, 1, 2, cv::THRESH_BINARY);
-
-                D_Sx.convertTo(frame, CV_8UC1);
-                cv::add(abandoned_map, -1, abandoned_map);
-                cv::add(abandoned_map, frame, abandoned_map);
-
-
-                if (i > frameinit)
+                for (fullbits_int_t j = 1; j < image.rows - 1; ++j)
                 {
-                    for (fullbits_int_t j = 1; j < image.rows - 1; ++j)
+                    plain_map_ptr += image.cols;
+                    for (fullbits_int_t k = 1; k < image.cols - 1; ++k)
                     {
-                        plain_map_ptr += image.cols;
-                        for (fullbits_int_t k = 1; k < image.cols - 1; ++k)
-                        {
-                            auto point = plain_map_ptr + k;
+                        auto point = plain_map_ptr + k;
 
-                            //hmm, this code can be removed for test image - same result
-                            if (*point > aotime2 && *point < aotime)
-                                for (fullbits_int_t c0 = -1; c0 <= 1; ++c0)
+                        //hmm, this code can be removed for test image - same result
+                        if (*point > aotime2 && *point < aotime)
+                            for (fullbits_int_t c0 = -1; c0 <= 1; ++c0)
+                            {
+                                if (c0 && *(point + c0) > aotime) //excluding c0 = 0 which is meself
                                 {
-                                    if (c0 && *(point + c0) > aotime) //excluding c0 = 0 which is meself
-                                    {
-                                        *point = aotime;
-                                        break;
-                                    }
-
-                                    if (*(point + image.cols + c0) > aotime )
-                                    {
-                                        *point = aotime;
-                                        break;
-                                    }
-
-                                    if (*(point - image.cols + c0) > aotime )
-                                    {
-                                        *point = aotime;
-                                        break;
-                                    }
+                                    *point = aotime;
+                                    break;
                                 }
-                        }
+
+                                if (*(point + image.cols + c0) > aotime )
+                                {
+                                    *point = aotime;
+                                    break;
+                                }
+
+                                if (*(point - image.cols + c0) > aotime )
+                                {
+                                    *point = aotime;
+                                    break;
+                                }
+                            }
                     }
                 }
             }
@@ -285,8 +255,8 @@ int main(int argc, char * argv[])
 
             cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
             cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
-            //cv::cartToPolar(grad_x, grad_y, not_used, angles.getStorage(), false);
-            cl->atan2(grad_x, grad_y, angles.getStorage());
+            cv::cartToPolar(grad_x, grad_y, not_used, angles.getStorage(), false);
+            //cl->atan2(grad_x, grad_y, angles.getStorage());
 
 #ifndef NO_GUI
             image.copyTo(frame);
@@ -325,7 +295,9 @@ int main(int argc, char * argv[])
                         CV_AA); // Anti-alias
 
             cv::imshow("output", frame);//ok,those 2 take around -5 fps on i7
-            cv::waitKey(10);
+            //cv::imshow("output", abandoned_map);
+            if (27 == cv::waitKey(10))
+                break;
 #endif
         }
 

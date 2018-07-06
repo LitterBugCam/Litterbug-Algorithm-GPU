@@ -38,7 +38,7 @@ void edge_segments(const ZeroedArray<uint8_t> &object_map, const ZeroedArray<flo
     for (fullbits_int_t r = rr; r < h; ++r)
         for (fullbits_int_t c = cc; c < w; ++c)
         {
-            if (canny.at(c, r) == 255 && object_map.at(c, r) == 255)
+            if (canny.at(c, r) == 255 && object_map.at(c, r) >= 255)
             {
                 float omin = 1000;
                 fullbits_int_t cs = 0, rs = 0;
