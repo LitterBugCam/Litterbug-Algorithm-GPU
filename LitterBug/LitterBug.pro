@@ -17,9 +17,10 @@ HEADERS += \
 
 LIBS += -lopencv_core -lopencv_videoio -lopencv_imgproc -lopencv_highgui
 
-QMAKE_CXXFLAGS +=  -Wctor-dtor-privacy -Werror=delete-non-virtual-dtor -fno-strict-aliasing
+QMAKE_CXXFLAGS +=  -Wctor-dtor-privacy -Werror=delete-non-virtual-dtor -fno-strict-aliasing -fexceptions
 QMAKE_CXXFLAGS +=  -Werror=strict-aliasing -Wstrict-aliasing=2
 
+include ($$PWD/../cl/cl.pri)
 
 CONFIG(debug, debug|release) {
      message( "Building the DEBUG Version" )
@@ -27,7 +28,8 @@ CONFIG(debug, debug|release) {
      QMAKE_CXXFLAGS +=  -march=native -O0 -g
      DEFINES += _DEBUG
      DEFINES += DEBUG
-     unix:!maxc:QMAKE_CXXFLAGS += -fsanitize=undefined -fsanitize=vptr
+     #okey...opencl header leads to UB ...damn
+     #unix:!maxc:QMAKE_CXXFLAGS += -fsanitize=undefined -fsanitize=vptr
      unix:!maxc:LIBS += -lubsan
 }
 else {

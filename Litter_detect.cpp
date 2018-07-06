@@ -3,6 +3,9 @@
 #include "parameters.h"
 #include <map>
 #include <functional>
+#include "cl/matproxy.h"
+#include "cl/kernels.h"
+#include <memory>
 
 #ifndef NO_GUI
     #include <opencv/highgui.h>
@@ -57,8 +60,11 @@ const static std::map<std::string, std::function<void(const std::string& src)>> 
 };
 #undef DECLARE_PARAM
 
+std::shared_ptr<openCl> cl(nullptr);
+
 int main(int argc, char * argv[])
 {
+    cl = std::make_shared<openCl>();
 
     std::ofstream results;
     results.open ("detected_litters.txt");
@@ -279,7 +285,8 @@ int main(int argc, char * argv[])
 
             cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
             cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
-            cv::cartToPolar(grad_x, grad_y, not_used, angles.getStorage(), false);
+            //cv::cartToPolar(grad_x, grad_y, not_used, angles.getStorage(), false);
+            cl->atan2(grad_x, grad_y, angles.getStorage());
 
 #ifndef NO_GUI
             image.copyTo(frame);
