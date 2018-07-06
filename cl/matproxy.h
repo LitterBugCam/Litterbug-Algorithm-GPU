@@ -14,9 +14,19 @@ private:
     cv::Mat& source;
     std::vector<T> buffer;
     T FillBy;
+    cv::Mat& dumb1() const
+    {
+        static cv::Mat dumb;
+        return dumb;
+    }
 public:
     //ensuring we use only plain types like float, int
     using value_type = typename std::enable_if<std::is_arithmetic<T>::value, T>::type;
+
+    MatProxy():
+        source(dumb1())
+    {
+    }
 
     MatProxy(cv::Mat& source, T FillBy):
         source(source),
@@ -35,6 +45,22 @@ public:
     operator T*()
     {
         return ptr(true);
+    }
+
+    //allows to do statics
+    void assign(cv::Mat& source, T FillBy)
+    {
+        this->source = source;
+        this->FillBy = FillBy;
+        assert(source.cols * source.rows != 0);
+        assert(source.type() == cv::DataType<T>::type);
+    }
+
+    //allows to do statics
+    void assign(cv::Mat& source, int rows, int cols)
+    {
+        this->source = source;
+        source.create(rows, cols, cv::DataType<T>::type);
     }
 
     //returns memory which is multiply of aligment in size of elements

@@ -89,11 +89,24 @@ openCl::openCl()
         std::cerr << "Error setting default platform.";
         exit(255);
     }
-    clCont = cl::Context::getDefault();
-    clDev  = cl::Device::getDefault();
-    // Default command queue, also passed in as a parameter
-    queue = cl::CommandQueue(clCont, clDev);
-
+    try
+    {
+        std::vector<cl::Device> dlist;
+        plat.getDevices(CL_DEVICE_TYPE_GPU, &dlist);
+        if (!dlist.size())
+        {
+            std::cerr << "Error - no GPU detected.";
+            exit(255);
+        }
+        clDev = dlist.at(0);
+        cl::Device::setDefault(clDev);
+        clCont = cl::Context(clDev);
+        cl::Context::setDefault(clCont);
+        // Default command queue, also passed in as a parameter
+        queue = cl::CommandQueue(clCont, clDev);
+        cl::CommandQueue::setDefault(queue);
+    }
+    CATCHCL
     Kernels = getCompiledKernels();
 }
 
@@ -108,7 +121,7 @@ void openCl::atan2(cv::Mat &x, cv::Mat &y, cv::Mat &angle)
 
     try
     {
-        auto kernel = cl::KernelFunctor<int32_t, cl::Buffer&, cl::Buffer&, cl::Buffer&>(Kernels, "cartToAngle");
+        auto kernel = cl::KernelFunctor<const int32_t, cl::Buffer&, cl::Buffer&, cl::Buffer&>(Kernels, "cartToAngle");
         cl::Buffer bx(px.ptr(), px.end(), true);
         cl::Buffer by(py.ptr(), py.end(), true);
         cl::Buffer ba(pa.ptr(), pa.end(), false);
