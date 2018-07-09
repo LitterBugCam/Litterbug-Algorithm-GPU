@@ -210,7 +210,7 @@ int main(int argc, char * argv[])
         else
         {
             const bool is_deeper_magic = (i % framemod2 == 0);
-            cl->magic(is_deeper_magic, alpha_S, fore_th, grad_x, grad_y, B_Sx, B_Sy, abandoned_map);
+            //cl->magic(is_deeper_magic, alpha_S, fore_th, grad_x, grad_y, B_Sx, B_Sy, abandoned_map);
 
             if (i > frameinit && is_deeper_magic)
             {
@@ -250,14 +250,24 @@ int main(int argc, char * argv[])
                 }
             }
 
+            const auto dump = [&grad_x, &grad_y, &angles]()
+            {
+                const auto deltaa = 10 * grad_x.cols + 0;
+                std::cout << "DUMP: " << std::endl;
+                for (auto i = 0; i < 16; ++i)
+                    std::cout << "x = " << *(grad_x.ptr<float>() + i + deltaa) << "; y = " << *(grad_y.ptr<float>() + i + deltaa) << "; a = " << *(angles.getStorage().ptr<float>() + i + deltaa) << std::endl;
+            };
+
             cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
             abandoned_objects.populateObjects(frame, i);
 
             cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
             cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
             cv::cartToPolar(grad_x, grad_y, not_used, angles.getStorage(), false);
-            //cl->atan2(grad_x, grad_y, angles.getStorage());
-
+            dump();
+            cl->atan2(grad_x, grad_y, angles.getStorage());
+            dump();
+            break;
 #ifndef NO_GUI
             image.copyTo(frame);
 #endif

@@ -106,8 +106,11 @@ public:
     //allows to do statics
     void assign(cv::Mat& source, int rows, int cols)
     {
-        source.create(rows, cols, cv::DataType<T>::type);
-        this->source = source;
+        if (source.rows != rows || source.cols != cols || source.type() != cv::DataType<T>::type)
+            source.create(rows, cols, cv::DataType<T>::type);
+        assert(source.cols * source.rows != 0);
+        assert(source.type() == cv::DataType<T>::type);
+        this->source = &source;
     }
 
     //copies source to temp buffer if needed

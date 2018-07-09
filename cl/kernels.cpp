@@ -29,19 +29,28 @@ cl::Program getCompiledKernels()
     const static std::vector<std::string> source =
     {
         R"CLC(
-        __kernel void cartToAngle(const int total, __global const float* gradx, __global const float* grady, __global float* radians)
+        __kernel void cartToAngle(const int total, float gpu16, float gpu1, __global const float* gradx, __global const float* grady, __global float* radians)
         {
-           private const size_t i        = get_global_id(0);
-           private const size_t gpu_used = get_global_size(0);
+            private const size_t i        = get_global_id(0);
+            private const size_t gpu_used = get_global_size(0);
 
-           private const size_t elements_count = total / (gpu_used * 16);
-           private const size_t offset = i * total / gpu_used;
+            private const int elements_count = (int)(total * gpu16); //total / (gpu_used * 16);
+            private const int offset = (int)(i * total * gpu1);      //i * total / gpu_used;
+            if (elements_count * 16 * gpu_used != total || offset + elements_count >= total)
+            {
+                printf("Invalid offset/element_count into cartToAngle kernel, %d-%d-%d", total, elements_count, offset);
 
+            }
+            else {
+            const float pi2 = 2 * 3.14159265f;
             for (size_t k = 0; k < elements_count; ++k)
             {
                private float16 x = vload16( k , gradx + offset);
                private float16 y = vload16( k , grady + offset);
-               vstore16(atan2(y, x) + 3.14159265f, k, radians + offset);
+               float16 a = atan2(y, x);
+               a = select(a, a + pi2, a < 0);
+               vstore16(a, k, radians + offset);
+            }
             }
         }
         )CLC",
@@ -52,12 +61,19 @@ cl::Program getCompiledKernels()
                                                  __global float* BSx,  __global float* BSy, __global int* mapRes)
         {
             private const size_t i        = get_global_id(0);
-            //private const size_t gpu_used = get_global_size(0);
+            private const size_t gpu_used = get_global_size(0);
 
             private const int elements_count = (int)(total * gpu16); //total / (gpu_used * 16);
             private const int offset = (int)(i * total * gpu1);      //i * total / gpu_used;
 
             const int16 mult = is_deeper_magic; //all 1's or all 0's
+
+        if (elements_count * 16 * gpu_used != total || offset + elements_count >= total)
+        {
+            printf("Invalid offset/element_count into gradMagic kernel, %d-%d-%d", total, elements_count, offset);
+
+        }
+        else {
 
             for (int k = 0; k < elements_count; ++k)
             {
@@ -99,6 +115,7 @@ cl::Program getCompiledKernels()
 
                vstore16(mr, k, mapRes + offset);
             }
+        }
         }
         )CLC",
     };
@@ -182,28 +199,34 @@ openCl::openCl()
     Kernels = getCompiledKernels();
 }
 
-void openCl::atan2(cv::Mat &x, cv::Mat &y, cv::Mat &angle)
+void openCl::atan2(cv::Mat &gradx, cv::Mat &grady, cv::Mat &angle)
 {
-
-    const auto xs = x.rows * x.cols;
-    const auto ys = y.rows * y.cols;
+    const auto xs = gradx.rows * gradx.cols;
+    const auto ys = grady.rows * grady.cols;
     assert(xs == ys);
-    MatProxy<float> px(x, 1, Align);
-    MatProxy<float> py(y, 1, Align);
-    MatProxy<float> pa(angle, x.rows, x.cols, Align);
+    static MatProxy<float> px(Align);
+    px.assign(gradx, 0);
+    static MatProxy<float> py(Align);
+    py.assign(grady, 0);
+    static MatProxy<float> pa(Align);
+    pa.assign(angle, gradx.rows, gradx.cols);
 
     try
     {
-        auto kernel = cl::KernelFunctor<const int32_t, cl::Buffer&, cl::Buffer&, cl::Buffer&>(Kernels, "cartToAngle");
+        auto kernel = cl::KernelFunctor<const int32_t, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&>(Kernels, "cartToAngle");
         cl::Buffer bx(queue, px.r_ptr(), px.end(), true, true);
         cl::Buffer by(queue, py.r_ptr(), py.end(), true, true);
         cl::Buffer ba(queue, pa.w_ptr(), pa.end(), false, true);
         //https://jorudolph.wordpress.com/2012/02/03/opencl-work-item-ids-globalgrouplocal/
-        kernel(cl::EnqueueArgs(queue, cl::NDRange(gpuUsed), cl::NDRange(gpuUsed)), px.sizeAligned(), bx, by, ba).wait();
+        kernel(cl::EnqueueArgs(queue, cl::NDRange(gpuUsed), cl::NDRange(gpuUsed)), px.sizeAligned(),  gpu16, gpu1, bx, by, ba).wait();
         cl::copy(ba, pa.w_ptr(), pa.end());
     }
     CATCHCL
     pa.updateMatrixIfNeeded();
+
+    //    const auto deltaa = 10 * gradx.cols + 50;
+    //    for (auto i = 0; i < 16; ++i)
+    //        std::cout << "x = " << *(px.w_ptr() + i + deltaa) << "; y = " << *(py.w_ptr() + i + deltaa) << "; a = " << *(pa.w_ptr() + i + deltaa) << std::endl;
 
 }
 
