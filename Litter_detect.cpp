@@ -62,69 +62,8 @@ const static std::map<std::string, std::function<void(const std::string& src)>> 
 
 std::shared_ptr<openCl> cl(nullptr);
 
-int main(int argc, char * argv[])
+static void execute(const char* videopath, std::ofstream& results)
 {
-    cl = std::make_shared<openCl>();
-
-    std::ofstream results;
-    results.open ("detected_litters.txt");
-    results << "        detected litters \n\n";
-    std::ifstream paramsFile( "parameters.txt" );
-
-    if (!paramsFile.is_open())
-    {
-        std::cerr << "Cannot load parameters.txt" << std::endl;
-        exit(2);
-    }
-
-    for (std::string tmp; !paramsFile.eof();)
-    {
-        std::getline(paramsFile, tmp);
-        auto peq = tmp.find_first_of('=');
-        if (peq != std::string::npos)
-        {
-            auto name = trim_copy(tmp.substr(0, peq ));
-            auto val  = trim_copy(tmp.substr(peq + 1));
-            std::cout << "Parsing: " << name << " = " << val << std::endl;
-            if (param_setters.count(name))
-                param_setters.at(name)(val);
-            else
-                std::cerr << "Unknown parameter line: " << tmp << std::endl;
-        }
-    }
-
-    if (std::abs(fps_life) < 0.00001f)
-        fps_life = 40. / 25.; //thats is default test value for my test video
-
-    if (aotime <= aotime2)
-    {
-        std::cerr << "aotime must be greater then aotime2" << std::endl;
-        exit(5);
-    }
-
-#ifndef NO_FPS
-    std::cout << "Using FPS" << std::endl;
-#else
-    std::cout << "NOT using FPS" << std::endl;
-#endif
-
-#ifndef NO_GUI
-    std::cout << "Using GUI" << std::endl;
-#else
-    std::cout << "NOT using GUI" << std::endl;
-#endif
-    std::cout.flush();
-
-
-
-    const char * videopath = (argc < 2) ? nullptr : argv[1];
-
-
-    if (!videopath)
-    {
-        std::cout << "please specify the video path" << std::endl;
-        exit(1);
-    }
     std::cout << "Video file: " << videopath << std::endl;
     cv::VideoCapture capture(videopath);
     const auto framesCount = static_cast<long>(capture.get(CV_CAP_PROP_FRAME_COUNT));
@@ -373,6 +312,90 @@ int main(int argc, char * argv[])
             std::cerr << "FPS  " << meanfps / (i + 1) << ", Objects: " << abandoned_objects.candidat.size() << std::endl;
 #endif
 #endif
+    }
+}
+
+
+int main(int argc, char * argv[])
+{
+    cl = std::make_shared<openCl>();
+
+    std::ofstream results;
+    results.open ("detected_litters.txt");
+    results << "        detected litters \n\n";
+    std::ifstream paramsFile( "parameters.txt" );
+
+    if (!paramsFile.is_open())
+    {
+        std::cerr << "Cannot load parameters.txt" << std::endl;
+        exit(2);
+    }
+
+    for (std::string tmp; !paramsFile.eof();)
+    {
+        std::getline(paramsFile, tmp);
+        auto peq = tmp.find_first_of('=');
+        if (peq != std::string::npos)
+        {
+            auto name = trim_copy(tmp.substr(0, peq ));
+            auto val  = trim_copy(tmp.substr(peq + 1));
+            std::cout << "Parsing: " << name << " = " << val << std::endl;
+            if (param_setters.count(name))
+                param_setters.at(name)(val);
+            else
+                std::cerr << "Unknown parameter line: " << tmp << std::endl;
+        }
+    }
+
+    if (std::abs(fps_life) < 0.00001f)
+        fps_life = 40. / 25.; //thats is default test value for my test video
+
+    if (aotime <= aotime2)
+    {
+        std::cerr << "aotime must be greater then aotime2" << std::endl;
+        exit(5);
+    }
+
+#ifndef NO_FPS
+    std::cout << "Using FPS" << std::endl;
+#else
+    std::cout << "NOT using FPS" << std::endl;
+#endif
+
+#ifndef NO_GUI
+    std::cout << "Using GUI" << std::endl;
+#else
+    std::cout << "NOT using GUI" << std::endl;
+#endif
+    std::cout.flush();
+
+
+
+    const char * videopath = (argc < 2) ? nullptr : argv[1];
+
+    if (!videopath)
+    {
+        std::cout << "please specify the video path" << std::endl;
+        exit(1);
+    }
+    try
+    {
+        execute(videopath, results);
+    }
+    catch (const std::runtime_error& re)
+    {
+        std::cerr << "Runtime error: " << re.what() << std::endl;
+        return 255;
+    }
+    catch (const std::exception& ex)
+    {
+        std::cerr << "Error occurred: " << ex.what() << std::endl;
+        return 255;
+    }
+    catch (...)
+    {
+        std::cerr << "Unknown failure occurred. Possible memory corruption" << std::endl;
+        return 255;
     }
     return 0;
 }
