@@ -306,7 +306,7 @@ int main(int argc, char * argv[])
         meanfps =  (1 / t) + meanfps;
         //print out only with no gui
 #ifdef NO_GUI
-        if (i % 50 == 0 )
+        if (i % 10 == 0 )
             std::cerr << "FPS  " << meanfps / (i + 1) << ", Objects: " << abandoned_objects.candidat.size() << std::endl;
 #endif
 #endif

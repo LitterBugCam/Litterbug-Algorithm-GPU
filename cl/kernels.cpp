@@ -224,7 +224,7 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
     pby.assign(by, 0);
     static MatProxy<uint8_t, int> pres(Align);
     pres.assign(mapR, 0);
-    std::cout << "Starting magic...\n";
+    //std::cout << "Starting magic...\n";
     auto start = now();
     try
     {
@@ -234,18 +234,20 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
         cl::Buffer bbx( queue, pbx.r_ptr(),   pbx.end(),  false, true);
         cl::Buffer bby( queue, pby.r_ptr(),   pby.end(),  false, true);
         cl::Buffer bres(queue, pres.r_ptr(),  pres.end(), false, true);
-        std::cout << "Ready to call kernel magic...\n";
+        //std::cout << "Ready to call kernel magic...\n";
         kernel(cl::EnqueueArgs(queue, cl::NDRange(gpuUsed), cl::NDRange(gpuUsed)), pgx.sizeAligned(), gpu16, gpu1, (is_deeper_magic) ? 1 : 0, alpha_s, fore_th, bpgx, bpgy, bbx, bby, bres).wait();
-        std::cout << "Call kernel magic ended...\n";
+        //std::cout << "Call kernel magic ended...\n";
         cl::copy(bbx,  pbx.w_ptr(),  pbx.end());
         cl::copy(bby,  pby.w_ptr(),  pby.end());
         cl::copy(bres, pres.w_ptr(), pres.end());
-        std::cout << "Copied data to sysmemory...\n";
+        //std::cout << "Copied data to sysmemory...\n";
     }
     CATCHCL
 
     pbx.updateMatrixIfNeeded();
     pby.updateMatrixIfNeeded();
     pres.updateMatrixIfNeeded();
+#ifndef NO_FPS
     std::cout << "Magic is done in (ms): " << now() - start << std::endl;
+#endif
 }
