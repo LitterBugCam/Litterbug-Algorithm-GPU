@@ -71,10 +71,8 @@ cl::Program getCompiledKernels()
                private float16 x = vload16( k , gradx + offset);
                private float16 y = vload16( k , grady + offset);
                float16 a  = myatan2(y, x);
-               float16 a2 = a + pi2;
-               int16 c1   = isless(a,  0.f);
-               float16 ar = select(a, a2, c1);
-               vstore16(ar, k, radians + offset);
+               a = fmod(a + pi2, pi2);
+               vstore16(a, k, radians + offset);
             }
         }
         )CLC",
