@@ -57,13 +57,14 @@ cl::Program getCompiledKernels()
           return t3;
         }
 
-        float16 myselect(float16 afalse, float16 atrue, int16 condition)
+        float16 myselectf16(float16 afalse, float16 atrue, int16 condition)
         {
             //we have -1 = true in condition ...it should be so
-            float16 cond = convert_float16(condition) * -1.f;
+            float16 cond = -1.f * convert_float16(condition);
             float16 not_cond = 1.f - cond;
             return atrue * cond + afalse * not_cond;
         }
+
 
         __kernel void cartToAngle(const int total, float gpu16, float gpu1, __global const float* gradx, __global const float* grady, __global float* radians)
         {
@@ -80,13 +81,22 @@ cl::Program getCompiledKernels()
                private float16 y = vload16( k , grady + offset);
                float16 a  = myatan2(y, x);
                //a = fmod(a + pi2, pi2);
-               a = myselect(a, a + pi2, a < 0);
+               a = myselectf16(a, a + pi2, a < 0);
                vstore16(a, k, radians + offset);
             }
         }
         )CLC",
 
         R"CLC(
+
+        int16 myselecti16(int16 afalse, int16 atrue, int16 condition)
+        {
+            //we have -1 = true in condition ...it should be so
+            int16 cond     = -1 * condition;
+            int16 not_cond = 1 - cond;
+            return atrue * cond + afalse * not_cond;
+        }
+
         __kernel void gradMagic(const int total, float gpu16, float gpu1, const int is_deeper_magic, const float alpha_s, const float fore_th, __global const float* gradx, __global const float* grady,
                                                  //in/out
                                                  __global float* BSx,  __global float* BSy, __global int* mapRes)
@@ -135,9 +145,9 @@ cl::Program getCompiledKernels()
 
 
                c1 = mr < zeros;
-               c2 = convert_int16(select(mr, zeros, c1));//overflow protection
+               c2 = myselecti16(mr, zeros, c1);//overflow protection
                c1 = c2 > twos5;
-               mr = convert_int16(select(c2, twos5, c1)); //overflow protection
+               mr = myselecti16(c2, twos5, c1); //overflow protection
 
                vstore16(mr, k, mapRes + offset);
 
