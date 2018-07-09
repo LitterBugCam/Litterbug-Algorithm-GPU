@@ -29,6 +29,33 @@ cl::Program getCompiledKernels()
     const static std::vector<std::string> source =
     {
         R"CLC(
+        float16 myatan2(float16 y, float16 x)
+        {
+          float16 t0, t1, t2, t3, t4;
+
+          t3 = fabs(x);
+          t1 = fabs(y);
+          t0 = max(t3, t1);
+          t1 = min(t3, t1);
+          t3 = 1.f / t0;
+          t3 = t1 * t3;
+
+          t4 = t3 * t3;
+          t0 =         - 0.013480470f;
+          t0 = t0 * t4 + 0.057477314f;
+          t0 = t0 * t4 - 0.121239071f;
+          t0 = t0 * t4 + 0.195635925f;
+          t0 = t0 * t4 - 0.332994597f;
+          t0 = t0 * t4 + 0.999995630f;
+          t3 = t0 * t3;
+
+          t3 = (fabs(y) > fabs(x)) ? 1.570796327f - t3 : t3;
+          t3 = (x < 0) ?  3.141592654f - t3 : t3;
+          t3 = (y < 0) ? -t3 : t3;
+
+          return t3;
+        }
+
         __kernel void cartToAngle(const int total, float gpu16, float gpu1, __global const float* gradx, __global const float* grady, __global float* radians)
         {
             private const size_t i        = get_global_id(0);
@@ -42,7 +69,7 @@ cl::Program getCompiledKernels()
             {
                private float16 x = vload16( k , gradx + offset);
                private float16 y = vload16( k , grady + offset);
-               float16 a = atan2(y, x);
+               float16 a = myatan2(y, x);
                a = select(a, a + pi2, a < 0);
                vstore16(a, k, radians + offset);
             }
