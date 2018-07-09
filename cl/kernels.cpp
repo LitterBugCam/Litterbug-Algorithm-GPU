@@ -26,8 +26,27 @@ static float gpu16 = 1.f / Align;
 //warning! I assume incoming memory is aligned to 16 * 12 !!! (12 cpus, 16 numbers per iteration in loop)
 cl::Program getCompiledKernels()
 {
+    const static std::string support_funcs = R"CLC(
+                                             float16 myselectf16(float16 afalse, float16 atrue, int16 condition)
+                                             {
+                                                 //we have -1 = true in condition ...it should be so
+                                                 float16 cond = -1.f * convert_float16(condition);
+                                                 float16 not_cond = 1.f - cond;
+                                                 return atrue * cond + afalse * not_cond;
+                                             }
+
+                                             int16 myselecti16(int16 afalse, int16 atrue, int16 condition)
+                                             {
+                                                 //we have -1 = true in condition ...it should be so
+                                                 int16 cond     = -1 * condition;
+                                                 int16 not_cond = 1 - cond;
+                                                 return atrue * cond + afalse * not_cond;
+                                             }
+
+    )CLC";
     const static std::vector<std::string> source =
     {
+        support_funcs,
         R"CLC(
         //nvidia ref. impl.: http://developer.download.nvidia.com/cg/atan2.html
         float16 myatan2(float16 y, float16 x)
@@ -57,15 +76,6 @@ cl::Program getCompiledKernels()
           return t3;
         }
 
-        float16 myselectf16(float16 afalse, float16 atrue, int16 condition)
-        {
-            //we have -1 = true in condition ...it should be so
-            float16 cond = -1.f * convert_float16(condition);
-            float16 not_cond = 1.f - cond;
-            return atrue * cond + afalse * not_cond;
-        }
-
-
         __kernel void cartToAngle(const int total, float gpu16, float gpu1, __global const float* restrict gradx, __global const float* restrict grady, __global float* restrict radians)
         {
             private const size_t i        = get_global_id(0);
@@ -80,7 +90,7 @@ cl::Program getCompiledKernels()
                private float16 x = vload16( k , gradx + offset);
                private float16 y = vload16( k , grady + offset);
                float16 a  = myatan2(y, x);
-               //a = fmod(a + pi2, pi2);
+               //a = fmod(a + pi2, pi2); //on nvidia myselectf16 works faster then fmod
                a = myselectf16(a, a + pi2, a < 0);
                vstore16(a, k, radians + offset);
             }
@@ -88,14 +98,6 @@ cl::Program getCompiledKernels()
         )CLC",
 
         R"CLC(
-
-        int16 myselecti16(int16 afalse, int16 atrue, int16 condition)
-        {
-            //we have -1 = true in condition ...it should be so
-            int16 cond     = -1 * condition;
-            int16 not_cond = 1 - cond;
-            return atrue * cond + afalse * not_cond;
-        }
 
         __kernel void gradMagic(const int total, float gpu16, float gpu1, const int is_deeper_magic, const float alpha_s, const float fore_th, __global const float* gradx, __global const float* grady,
                                                  //in/out
