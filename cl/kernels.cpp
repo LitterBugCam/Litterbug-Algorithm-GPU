@@ -17,6 +17,11 @@ static cl::CommandQueue queue;
 static cl::Program Kernels;
 static int gpuUsed = 12;
 static int Align = gpuUsed * 16;
+
+//VC4C compiler does invalid division on PI
+static float gpu1 = 1.f / gpuUsed;
+static float gpu16 = 1.f / Align;
+
 //warning! I assume incoming memory is aligned to 16 * 12 !!! (12 cpus, 16 numbers per iteration in loop)
 cl::Program getCompiledKernels()
 {
@@ -41,19 +46,19 @@ cl::Program getCompiledKernels()
         )CLC",
 
         R"CLC(
-        __kernel void gradMagic(const int total, const int is_deeper_magic, const float alpha_s, const float fore_th, __global const float* gradx, __global const float* grady,
+        __kernel void gradMagic(const int total, float gpu16, float gpu1, const int is_deeper_magic, const float alpha_s, const float fore_th, __global const float* gradx, __global const float* grady,
                                                  //in/out
                                                  __global float* BSx,  __global float* BSy, __global int* mapRes)
         {
             private const size_t i        = get_global_id(0);
-            private const size_t gpu_used = get_global_size(0);
+            //private const size_t gpu_used = get_global_size(0);
 
-            private const size_t elements_count = total / (gpu_used * 16);
-            private const size_t offset = i * total / gpu_used;
+            private const int elements_count = (int)(total * gpu16); //total / (gpu_used * 16);
+            private const int offset = (int)(i * total * gpu1);      //i * total / gpu_used;
 
             const int16 mult = is_deeper_magic; //all 1's or all 0's
 
-            for (size_t k = 0; k < elements_count; ++k)
+            for (int k = 0; k < elements_count; ++k)
             {
                const float16 as = alpha_s;
                private float16 gx = vload16( k , gradx + offset);
@@ -91,26 +96,6 @@ cl::Program getCompiledKernels()
                c1 = c2 > twos5;
                mr = convert_int16(select(c2, twos5, c1)); //overflow protection
 
-               vstore16(mr, k, mapRes + offset);
-            }
-        }
-        )CLC",
-        R"CLC(
-        __kernel void TestMagic(const int total, const int is_deeper_magic, const float alpha_s, const float fore_th, __global const float* gradx, __global const float* grady,
-                                                 //in/out
-                                                 __global float* BSx,  __global float* BSy, __global int* mapRes)
-        {
-            private const size_t i        = get_global_id(0);
-            private const size_t gpu_used = get_global_size(0);
-
-            private const size_t elements_count = 1;//total / (gpu_used * 16);
-            private const size_t offset = i * total ;/// gpu_used;
-
-            for (size_t k = 0; k < elements_count; ++k)
-            {
-               int16 mr           = vload16( k , mapRes + offset);
-               const int16 twos   = 2;
-               mr += twos;
                vstore16(mr, k, mapRes + offset);
             }
         }
@@ -188,6 +173,11 @@ openCl::openCl()
     }
     CATCHCL
     Align = gpuUsed * 16;
+
+    gpu1  = 1.f / gpuUsed;
+    gpu16 = 1.f / Align;
+
+
     Kernels = getCompiledKernels();
 }
 
@@ -228,30 +218,30 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
     pby.assign(by, 0);
     static MatProxy<uint8_t, int> pres(Align);
     pres.assign(mapR, 0);
-    std::cout << "Starting magic...\n";
+    //std::cout << "Starting magic...\n";
     try
     {
-        //auto kernel = cl::KernelFunctor<const int, int, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&>(Kernels, "gradMagic");
-        auto kernel = cl::KernelFunctor<const int, int, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&>(Kernels, "TestMagic");
+        auto kernel = cl::KernelFunctor<const int, float, float, int, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&>(Kernels, "gradMagic");
+        //auto kernel = cl::KernelFunctor<const int, int, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&>(Kernels, "TestMagic");
         cl::Buffer bpgx(queue, pgx.r_ptr(),   pgx.end(),  true,  true);
         cl::Buffer bpgy(queue, pgy.r_ptr(),   pgy.end(),  true,  true);
         cl::Buffer bbx( queue, pbx.r_ptr(),   pbx.end(),  false, true);
         cl::Buffer bby( queue, pby.r_ptr(),   pby.end(),  false, true);
         cl::Buffer bres(queue, pres.r_ptr(),  pres.end(), false, true);
-        std::cout << "Ready to call kernel magic...\n";
-        kernel(cl::EnqueueArgs(queue, cl::NDRange(gpuUsed), cl::NDRange(gpuUsed)), pgx.sizeAligned(), (is_deeper_magic) ? 1 : 0, alpha_s, fore_th, bpgx, bpgy, bbx, bby, bres).wait();
-        std::cout << "Call kernel magic ended...\n";
+        //std::cout << "Ready to call kernel magic...\n";
+        kernel(cl::EnqueueArgs(queue, cl::NDRange(gpuUsed), cl::NDRange(gpuUsed)), pgx.sizeAligned(), gpu16, gpu1, (is_deeper_magic) ? 1 : 0, alpha_s, fore_th, bpgx, bpgy, bbx, bby, bres).wait();
+        //std::cout << "Call kernel magic ended...\n";
         cl::copy(bbx,  pbx.w_ptr(),  pbx.end());
         cl::copy(bby,  pby.w_ptr(),  pby.end());
         cl::copy(bres, pres.w_ptr(), pres.end());
-        std::cout << "Copied data to sysmemory...\n";
+        //std::cout << "Copied data to sysmemory...\n";
     }
     CATCHCL
 
     pbx.updateMatrixIfNeeded();
     pby.updateMatrixIfNeeded();
     pres.updateMatrixIfNeeded();
-    std::cout << "Magic is done...\n";
+    //std::cout << "Magic is done...\n";
     //    for (int i = 0; i < 16; ++i)
     //        std::cout << *(pgx.w_ptr() + i + mapR.cols * 20 + 50) << " ";
     //    std::cout << std::endl;
