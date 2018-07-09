@@ -236,6 +236,10 @@ openCl::openCl()
     Kernels = getCompiledKernels();
 }
 
+openCl::~openCl()
+{
+}
+
 void openCl::atan2(cv::Mat &gradx, cv::Mat &grady, cv::Mat &angle)
 {
     const auto xs = gradx.rows * gradx.cols;

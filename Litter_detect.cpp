@@ -223,16 +223,18 @@ int main(int argc, char * argv[])
             assert(grad_y.isContinuous());
             auto grad_x_ptr = grad_x.ptr<float>();
             auto grad_y_ptr = grad_y.ptr<float>();
+
             assert(abandoned_map.isContinuous());
-            auto plain_map_ptr = abandoned_map.ptr<int>();
+            auto plain_map_ptr = abandoned_map.ptr<uchar>();
+
             if (is_deeper_magic)
             {
-                assert(abandoned_map.isContinuous());
+
 
                 assert(D_Sx.isContinuous());
                 assert(D_Sy.isContinuous());
 
-                auto plain_map_ptr = abandoned_map.ptr<uchar>();
+
                 auto D_Sx_ptr = D_Sx.ptr<float>();
                 auto D_Sy_ptr = D_Sy.ptr<float>();
 
