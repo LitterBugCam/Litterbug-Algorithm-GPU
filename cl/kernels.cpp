@@ -36,12 +36,7 @@ cl::Program getCompiledKernels()
 
             private const int elements_count = (int)(total * gpu16); //total / (gpu_used * 16);
             private const int offset = (int)(i * total * gpu1);      //i * total / gpu_used;
-            if (elements_count * 16 * gpu_used != total || offset + elements_count >= total)
-            {
-                printf("Invalid offset/element_count into cartToAngle kernel, %d-%d-%d", total, elements_count, offset);
 
-            }
-            else {
             const float pi2 = 2 * 3.14159265f;
             for (size_t k = 0; k < elements_count; ++k)
             {
@@ -50,7 +45,6 @@ cl::Program getCompiledKernels()
                float16 a = atan2(y, x);
                a = select(a, a + pi2, a < 0);
                vstore16(a, k, radians + offset);
-            }
             }
         }
         )CLC",
@@ -68,12 +62,7 @@ cl::Program getCompiledKernels()
 
             const int16 mult = is_deeper_magic; //all 1's or all 0's
 
-        if (elements_count * 16 * gpu_used != total || offset + elements_count >= total)
-        {
-            printf("Invalid offset/element_count into gradMagic kernel, %d-%d-%d", total, elements_count, offset);
 
-        }
-        else {
 
             for (int k = 0; k < elements_count; ++k)
             {
@@ -114,8 +103,8 @@ cl::Program getCompiledKernels()
                mr = convert_int16(select(c2, twos5, c1)); //overflow protection
 
                vstore16(mr, k, mapRes + offset);
+
             }
-        }
         }
         )CLC",
     };

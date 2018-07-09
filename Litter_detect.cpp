@@ -210,7 +210,7 @@ int main(int argc, char * argv[])
         else
         {
             const bool is_deeper_magic = (i % framemod2 == 0);
-            //cl->magic(is_deeper_magic, alpha_S, fore_th, grad_x, grad_y, B_Sx, B_Sy, abandoned_map);
+            cl->magic(is_deeper_magic, alpha_S, fore_th, grad_x, grad_y, B_Sx, B_Sy, abandoned_map);
 
             if (i > frameinit && is_deeper_magic)
             {
