@@ -103,8 +103,8 @@ cl::Program getCompiledKernels()
             private const size_t i        = get_global_id(0);
             private const size_t gpu_used = get_global_size(0);
 
-            private const size_t elements_count = total / (gpu_used * 16);
-            private const size_t offset = i * total / gpu_used;
+            private const size_t elements_count = 1;//total / (gpu_used * 16);
+            private const size_t offset = i * total ;/// gpu_used;
 
             for (size_t k = 0; k < elements_count; ++k)
             {
