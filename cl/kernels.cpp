@@ -57,6 +57,14 @@ cl::Program getCompiledKernels()
           return t3;
         }
 
+        float16 myselect(float16 afalse, float16 atrue, int16 condition)
+        {
+            //we have -1 = true in condition ...it should be so
+            float16 cond = convert_float16(condition) * -1.f;
+            float16 not_cond = 1.f - cond;
+            return atrue * cond + afalse * not_cond;
+        }
+
         __kernel void cartToAngle(const int total, float gpu16, float gpu1, __global const float* gradx, __global const float* grady, __global float* radians)
         {
             private const size_t i        = get_global_id(0);
@@ -71,7 +79,8 @@ cl::Program getCompiledKernels()
                private float16 x = vload16( k , gradx + offset);
                private float16 y = vload16( k , grady + offset);
                float16 a  = myatan2(y, x);
-               a = fmod(a + pi2, pi2);
+               //a = fmod(a + pi2, pi2);
+               a = myselect(a, a + pi2, a < 0);
                vstore16(a, k, radians + offset);
             }
         }
@@ -143,7 +152,8 @@ cl::Program getCompiledKernels()
 #ifndef NO_FPS
         std::cout << "Building kernels..." << std::endl;
 #endif
-        progs.build("-cl-opt-disable");
+        //progs.build("-cl-opt-disable");
+        progs.build();
     }
     catch (...)
     {
