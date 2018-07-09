@@ -214,38 +214,48 @@ int main(int argc, char * argv[])
             const bool is_deeper_magic = (i % framemod2 == 0);
             //cl->magic(is_deeper_magic, alpha_S, fore_th, grad_x, grad_y, B_Sx, B_Sy, abandoned_map);
 
-            cv::subtract(grad_x, B_Sx, D_Sx);
-            cv::add(D_Sx.mul(alpha_S), B_Sx, B_Sx);
+            D_Sx = grad_x - B_Sx;
+            B_Sx = B_Sx + alpha_S * D_Sx;
 
-            cv::subtract(grad_y, B_Sy, D_Sy);
-            cv::add(D_Sy.mul(alpha_S), B_Sy, B_Sy);
-
+            D_Sy = grad_y - B_Sy;
+            B_Sy = B_Sy + alpha_S * D_Sy;
+            assert(grad_x.isContinuous());
+            assert(grad_y.isContinuous());
+            auto grad_x_ptr = grad_x.ptr<float>();
+            auto grad_y_ptr = grad_y.ptr<float>();
             assert(abandoned_map.isContinuous());
             auto plain_map_ptr = abandoned_map.ptr<int>();
             if (is_deeper_magic)
             {
-                cv::absdiff(D_Sx, cv::Scalar::all(0), D_Sx);
-                cv::absdiff(grad_x, cv::Scalar::all(0), grad_x);
-                cv::absdiff(D_Sy, cv::Scalar::all(0), D_Sy);
-                cv::absdiff(grad_y, cv::Scalar::all(0), grad_y);
+                assert(abandoned_map.isContinuous());
 
-                cv::threshold(D_Sx, D_Sx, fore_th, 2, cv::THRESH_BINARY);
-                cv::threshold(grad_x, grad_x, 19, 1, cv::THRESH_BINARY);
-                cv::multiply(D_Sx, grad_x, D_Sx);
+                assert(D_Sx.isContinuous());
+                assert(D_Sy.isContinuous());
 
-                cv::threshold(D_Sy, D_Sy, fore_th, 2, cv::THRESH_BINARY);
-                cv::threshold(grad_y, grad_y, 19, 1, cv::THRESH_BINARY);
-                cv::multiply(D_Sy, grad_y, D_Sy);
+                auto plain_map_ptr = abandoned_map.ptr<uchar>();
+                auto D_Sx_ptr = D_Sx.ptr<float>();
+                auto D_Sy_ptr = D_Sy.ptr<float>();
 
-                cv::add(D_Sx, D_Sy, D_Sx);
-                cv::threshold(D_Sx, D_Sx, 1, 2, cv::THRESH_BINARY);
+                for (auto k = 0; k < image.rows * image.cols; ++k)
+                {
+                    auto point = plain_map_ptr + k;
+                    if (*point) //overflow prot
+                        *point -= 1;
 
-                D_Sx.convertTo(frame, CV_8UC1);
-                cv::add(abandoned_map, -1, abandoned_map);
-                cv::add(abandoned_map, frame, abandoned_map);
+                    //prevening overflow here
+                    //btw original code COULD overflow on whites...
+                    if ((std::abs(*(D_Sx_ptr + k)) > fore_th && std::abs(*(grad_x_ptr + k)) > 19) ||
+                            (std::abs(*(D_Sy_ptr + k)) > fore_th && std::abs(*(grad_y_ptr + k)) > 19))
+                    {
+                        if (*point < 254)
+                            *point += 2;
+                        else
+                            *point = 255;
+                    }
 
+
+                }
             }
-
             if (i > frameinit && is_deeper_magic)
             {
 
