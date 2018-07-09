@@ -193,8 +193,7 @@ cl::Program getCompiledKernels()
             uint y      = get_global_id(1);
             uint width  = get_global_size(0);
             uint height = get_global_size(1);
-            float Gx = (0);
-            float Gy = (0);
+
             // Given that we know the (x,y) coordinates of the pixel we're
             // looking at, its natural to use (x,y) to look at its
             // neighbouring pixels
@@ -400,21 +399,22 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
 
 void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angle)
 {
-    static MatProxy<uchar> pgray(1);//don't align, will run "rectangular" kernel
+    static MatProxy<uchar> pgray(16);//don't align, will run "rectangular" kernel
     pgray.assign(gray, 0);
 
-    static MatProxy<float> pgradx(1);
+    static MatProxy<float> pgradx(16);
     pgradx.assign(gradx, gray.rows, gray.cols);
 
-    static MatProxy<float> pgrady(1);
+    static MatProxy<float> pgrady(16);
     pgrady.assign(grady, gray.rows, gray.cols);
 
-    static MatProxy<float> pangle(1);
+    static MatProxy<float> pangle(16);
     pangle.assign(angle, gray.rows, gray.cols);
 
     auto gpus = gpuUsed;
-    while ((gray.rows * gray.cols) % gpus != 0)
+    while ((gray.rows * gray.cols / 16) % gpus != 0)
         --gpus;
+    std::cout << "Gpus used for sobel: " << gpus << std::endl;
 #ifndef NO_FPS
     auto start = now();
 #endif
@@ -439,9 +439,8 @@ void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angl
     pgradx.updateMatrixIfNeeded();
     pgrady.updateMatrixIfNeeded();
     pangle.updateMatrixIfNeeded();
-
 #ifndef NO_FPS
-    std::cout << "Sobels done in (ms): " << now() - start << std::endl;
+    std::cout << "Sobel2 is done in (ms): " << now() - start << std::endl;
 #endif
 
 }
