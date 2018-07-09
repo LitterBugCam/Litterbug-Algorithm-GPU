@@ -42,39 +42,69 @@ cl::Program getCompiledKernels()
                                                  int16 not_cond = 1 - cond;
                                                  return atrue * cond + afalse * not_cond;
                                              }
+                                             //nvidia ref. impl.: http://developer.download.nvidia.com/cg/atan2.html
+                                             float16 myatan2f16(float16 y, float16 x)
+                                             {
+                                               float16 t0, t1, t2, t3, t4;
+
+                                               t3 = fabs(x);
+                                               t1 = fabs(y);
+                                               t0 = max(t3, t1);
+                                               t1 = min(t3, t1);
+                                               t3 = 1.f / t0;
+                                               t3 = t1 * t3;
+
+                                               t4 = t3 * t3;
+                                               t0 =         - 0.013480470f;
+                                               t0 = t0 * t4 + 0.057477314f;
+                                               t0 = t0 * t4 - 0.121239071f;
+                                               t0 = t0 * t4 + 0.195635925f;
+                                               t0 = t0 * t4 - 0.332994597f;
+                                               t0 = t0 * t4 + 0.999995630f;
+                                               t3 = t0 * t3;
+
+                                               t3 = (fabs(y) > fabs(x)) ? 1.570796327f - t3 : t3;
+                                               t3 = (x < 0) ?  3.141592654f - t3 : t3;
+                                               t3 = (y < 0) ? -t3 : t3;
+
+                                               return t3;
+                                             }
+
+                                             //nvidia ref. impl.: http://developer.download.nvidia.com/cg/atan2.html
+                                             float myatan2f1(float y, float x)
+                                             {
+                                               float t0, t1, t2, t3, t4;
+
+                                               t3 = fabs(x);
+                                               t1 = fabs(y);
+                                               t0 = max(t3, t1);
+                                               t1 = min(t3, t1);
+                                               t3 = 1.f / t0;
+                                               t3 = t1 * t3;
+
+                                               t4 = t3 * t3;
+                                               t0 =         - 0.013480470f;
+                                               t0 = t0 * t4 + 0.057477314f;
+                                               t0 = t0 * t4 - 0.121239071f;
+                                               t0 = t0 * t4 + 0.195635925f;
+                                               t0 = t0 * t4 - 0.332994597f;
+                                               t0 = t0 * t4 + 0.999995630f;
+                                               t3 = t0 * t3;
+
+                                               t3 = (fabs(y) > fabs(x)) ? 1.570796327f - t3 : t3;
+                                               t3 = (x < 0) ?  3.141592654f - t3 : t3;
+                                               t3 = (y < 0) ? -t3 : t3;
+
+                                               return t3;
+                                             }
+
 
     )CLC";
     const static std::vector<std::string> source =
     {
         support_funcs,
         R"CLC(
-        //nvidia ref. impl.: http://developer.download.nvidia.com/cg/atan2.html
-        float16 myatan2(float16 y, float16 x)
-        {
-          float16 t0, t1, t2, t3, t4;
 
-          t3 = fabs(x);
-          t1 = fabs(y);
-          t0 = max(t3, t1);
-          t1 = min(t3, t1);
-          t3 = 1.f / t0;
-          t3 = t1 * t3;
-
-          t4 = t3 * t3;
-          t0 =         - 0.013480470f;
-          t0 = t0 * t4 + 0.057477314f;
-          t0 = t0 * t4 - 0.121239071f;
-          t0 = t0 * t4 + 0.195635925f;
-          t0 = t0 * t4 - 0.332994597f;
-          t0 = t0 * t4 + 0.999995630f;
-          t3 = t0 * t3;
-
-          t3 = (fabs(y) > fabs(x)) ? 1.570796327f - t3 : t3;
-          t3 = (x < 0) ?  3.141592654f - t3 : t3;
-          t3 = (y < 0) ? -t3 : t3;
-
-          return t3;
-        }
 
         __kernel void cartToAngle(const int total, float gpu16, float gpu1, __global const float* restrict gradx, __global const float* restrict grady, __global float* restrict radians)
         {
@@ -89,7 +119,7 @@ cl::Program getCompiledKernels()
             {
                private float16 x = vload16( k , gradx + offset);
                private float16 y = vload16( k , grady + offset);
-               float16 a  = myatan2(y, x);
+               float16 a  = myatan2f16(y, x);
                //a = fmod(a + pi2, pi2); //on nvidia myselectf16 works faster then fmod
                a = myselectf16(a, a + pi2, a < 0);
                vstore16(a, k, radians + offset);
@@ -156,6 +186,54 @@ cl::Program getCompiledKernels()
             }
         }
         )CLC",
+        R"CLC(
+        __kernel void SobelDetector( __global const uchar* restrict input,  __global float* restrict grad_x,  __global float* restrict grad_y,  __global float* restrict grad_dir)
+        {
+            uint x      = get_global_id(0);
+            uint y      = get_global_id(1);
+            uint width  = get_global_size(0);
+            uint height = get_global_size(1);
+            float Gx = (0);
+            float Gy = (0);
+            // Given that we know the (x,y) coordinates of the pixel we're
+            // looking at, its natural to use (x,y) to look at its
+            // neighbouring pixels
+            // Convince yourself that the indexing operation below is
+            // doing exactly that
+            // the variables i00 through to i22 seek to identify the pixels
+            // following the naming convention in graphics programming e.g.
+            // OpenGL where i00 refers
+            // to the top-left-hand corner and iterates through to the bottom
+            // right-hand corner
+            if( x >= 1 && x < (width-1) && y >= 1 && y < height - 1)
+            {
+                float i00 = convert_float(input[(x - 1) + (y - 1) * width]);
+                float i10 = convert_float(input[x + (y - 1) * width]);
+                float i20 = convert_float(input[(x + 1) + (y - 1) * width]);
+                float i01 = convert_float(input[(x - 1) + y * width]);
+                float i11 = convert_float(input[x + y * width]);
+                float i21 = convert_float(input[(x + 1) + y * width]);
+                float i02 = convert_float(input[(x - 1) + (y + 1) * width]);
+                float i12 = convert_float(input[x + (y + 1) * width]);
+                float i22 = convert_float(input[(x + 1) + (y + 1) * width]);
+                // To understand why the masks are applied this way, look
+                // at the mask for Gy and Gx which are respectively equal
+                // to the matrices:
+                // { {-1, 0, 1}, { {-1,-2,-1},
+                // {-2, 0, 2}, { 0, 0, 0},
+                // {-1, 0, 1}} { 1, 2, 1}}
+                uint out_index = x + y *width;
+                float Gx = i00 + (float)(2) * i10 + i20 - i02 - (float)(2) * i12 -i22;
+                float Gy = i00 - i20 + (float)(2)*i01 - (float)(2)*i21 + i02 - i22;
+
+                grad_x[out_index] = Gx;
+                grad_y[out_index] = Gy;
+                float a = myatan2f1(Gy, Gx);
+                if ( a < 0) a += 6.2831853f;
+                grad_dir[out_index] = a;
+            }
+       }
+      )CLC",
     };
 
     cl::Program progs(source);
@@ -316,4 +394,15 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
 #ifndef NO_FPS
     std::cout << "Magic is done in (ms): " << now() - start << std::endl;
 #endif
+}
+
+void openCl::sobel2(cv::Mat &gray, cv::Mat &float_out)
+{
+    static MatProxy<uchar> pgray(1);//don't align, will run "rectangular" kernel
+    pgray.assign(gray, 0);
+
+    static MatProxy<float> pout(1);
+    pout.assign(float_out, gray.rows, gray.cols);
+
+
 }

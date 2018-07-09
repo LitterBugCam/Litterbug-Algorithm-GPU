@@ -13,6 +13,7 @@ public:
     ~openCl();
     void atan2(cv::Mat&x, cv::Mat& y, cv::Mat& angle);
     void magic(bool is_deeper_magic,  const float alpha_s, const float fore_th, cv::Mat& gradx, cv::Mat& grady, cv::Mat& bx, cv::Mat& by, cv::Mat &mapR);
+    void sobel2(cv::Mat& gray, cv::Mat& float_out);
 };
 
 
