@@ -29,6 +29,7 @@ cl::Program getCompiledKernels()
     const static std::vector<std::string> source =
     {
         R"CLC(
+        //nvidia ref. impl.: http://developer.download.nvidia.com/cg/atan2.html
         float16 myatan2(float16 y, float16 x)
         {
           float16 t0, t1, t2, t3, t4;
@@ -69,9 +70,9 @@ cl::Program getCompiledKernels()
             {
                private float16 x = vload16( k , gradx + offset);
                private float16 y = vload16( k , grady + offset);
-               float16 a = myatan2(y, x);
-               a = select(a, a + pi2, a < 0);
-               vstore16(a, k, radians + offset);
+               float16 a  = myatan2(y, x);
+               float16 a2 = select(a, a + pi2, a < 0);
+               vstore16(a2, k, radians + offset);
             }
         }
         )CLC",
