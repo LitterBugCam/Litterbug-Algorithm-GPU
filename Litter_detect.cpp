@@ -305,9 +305,9 @@ int main(int argc, char * argv[])
 
             cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
             cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
-            //            cv::cartToPolar(grad_x, grad_y, not_used, angles.getStorage(), false);
+            cv::cartToPolar(grad_x, grad_y, not_used, angles.getStorage(), false);
             //            dump();
-            cl->atan2(grad_x, grad_y, angles.getStorage());
+            //cl->atan2(grad_x, grad_y, angles.getStorage());
             //            dump();
             //            break;
 #ifndef NO_GUI
