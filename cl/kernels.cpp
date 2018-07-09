@@ -66,7 +66,7 @@ cl::Program getCompiledKernels()
         }
 
 
-        __kernel void cartToAngle(const int total, float gpu16, float gpu1, __global const float* gradx, __global const float* grady, __global float* radians)
+        __kernel void cartToAngle(const int total, float gpu16, float gpu1, __global const float* restrict gradx, __global const float* restrict grady, __global float* restrict radians)
         {
             private const size_t i        = get_global_id(0);
             private const size_t gpu_used = get_global_size(0);
