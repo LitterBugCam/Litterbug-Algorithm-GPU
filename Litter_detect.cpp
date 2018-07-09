@@ -164,6 +164,8 @@ int main(int argc, char * argv[])
 
     cv::Mat B_Sx, B_Sy;
     cv::Mat grad_x, grad_y;
+    cv::Mat D_Sx, D_Sy;
+
     ZeroedArray<uint8_t> canny(0);
     ZeroedArray<uint8_t> object_map(0);
     ZeroedArray<float> angles(0);
@@ -210,12 +212,42 @@ int main(int argc, char * argv[])
         else
         {
             const bool is_deeper_magic = (i % framemod2 == 0);
-            cl->magic(is_deeper_magic, alpha_S, fore_th, grad_x, grad_y, B_Sx, B_Sy, abandoned_map);
+            //cl->magic(is_deeper_magic, alpha_S, fore_th, grad_x, grad_y, B_Sx, B_Sy, abandoned_map);
+
+            cv::subtract(grad_x, B_Sx, D_Sx);
+            cv::add(D_Sx.mul(alpha_S), B_Sx, B_Sx);
+
+            cv::subtract(grad_y, B_Sy, D_Sy);
+            cv::add(D_Sy.mul(alpha_S), B_Sy, B_Sy);
+
+            assert(abandoned_map.isContinuous());
+            auto plain_map_ptr = abandoned_map.ptr<int>();
+            if (is_deeper_magic)
+            {
+                cv::absdiff(D_Sx, cv::Scalar::all(0), D_Sx);
+                cv::absdiff(grad_x, cv::Scalar::all(0), grad_x);
+                cv::absdiff(D_Sy, cv::Scalar::all(0), D_Sy);
+                cv::absdiff(grad_y, cv::Scalar::all(0), grad_y);
+
+                cv::threshold(D_Sx, D_Sx, fore_th, 2, cv::THRESH_BINARY);
+                cv::threshold(grad_x, grad_x, 19, 1, cv::THRESH_BINARY);
+                cv::multiply(D_Sx, grad_x, D_Sx);
+
+                cv::threshold(D_Sy, D_Sy, fore_th, 2, cv::THRESH_BINARY);
+                cv::threshold(grad_y, grad_y, 19, 1, cv::THRESH_BINARY);
+                cv::multiply(D_Sy, grad_y, D_Sy);
+
+                cv::add(D_Sx, D_Sy, D_Sx);
+                cv::threshold(D_Sx, D_Sx, 1, 2, cv::THRESH_BINARY);
+
+                D_Sx.convertTo(frame, CV_8UC1);
+                cv::add(abandoned_map, -1, abandoned_map);
+                cv::add(abandoned_map, frame, abandoned_map);
+
+            }
 
             if (i > frameinit && is_deeper_magic)
             {
-                assert(abandoned_map.isContinuous());
-                auto plain_map_ptr = abandoned_map.ptr<int>();
 
                 for (fullbits_int_t j = 1; j < image.rows - 1; ++j)
                 {
@@ -250,13 +282,13 @@ int main(int argc, char * argv[])
                 }
             }
 
-            const auto dump = [&grad_x, &grad_y, &angles]()
-            {
-                const auto deltaa = 10 * grad_x.cols + 0;
-                std::cout << "DUMP: " << std::endl;
-                for (auto i = 0; i < 16; ++i)
-                    std::cout << "x = " << *(grad_x.ptr<float>() + i + deltaa) << "; y = " << *(grad_y.ptr<float>() + i + deltaa) << "; a = " << *(angles.getStorage().ptr<float>() + i + deltaa) << std::endl;
-            };
+            //            const auto dump = [&grad_x, &grad_y, &angles]()
+            //            {
+            //                const auto deltaa = 10 * grad_x.cols + 0;
+            //                std::cout << "DUMP: " << std::endl;
+            //                for (auto i = 0; i < 16; ++i)
+            //                    std::cout << "x = " << *(grad_x.ptr<float>() + i + deltaa) << "; y = " << *(grad_y.ptr<float>() + i + deltaa) << "; a = " << *(angles.getStorage().ptr<float>() + i + deltaa) << std::endl;
+            //            };
 
             cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
             abandoned_objects.populateObjects(frame, i);
