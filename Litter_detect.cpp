@@ -305,9 +305,18 @@ int main(int argc, char * argv[])
 
             cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
             cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
-            cv::cartToPolar(grad_x, grad_y, not_used, angles.getStorage(), false);
+            /*cv::cartToPolar gives initial fpses:
+             * FPS  1.58004, Objects: 0
+               FPS  1.52, Objects: 0
+               FPS  1.49778, Objects: 0
+              GPU atan2:
+               FPS  1.68022, Objects: 0
+               FPS  1.6261, Objects: 0
+               FPS  1.60769, Objects: 0
+             * */
+            //cv::cartToPolar(grad_x, grad_y, not_used, angles.getStorage(), false);
             //            dump();
-            //cl->atan2(grad_x, grad_y, angles.getStorage());
+            cl->atan2(grad_x, grad_y, angles.getStorage());
             //            dump();
             //            break;
 #ifndef NO_GUI
