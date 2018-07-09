@@ -1,6 +1,7 @@
 #include "kernels.h"
 #include <iostream>
 #include "matproxy.h"
+#include <chrono>
 
 #define CL_HPP_ENABLE_EXCEPTIONS 1
 #define CL_HPP_MINIMUM_OPENCL_VERSION 110
@@ -206,6 +207,11 @@ void openCl::atan2(cv::Mat &x, cv::Mat &y, cv::Mat &angle)
 
 }
 
+static int32_t now()
+{
+    return  std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
 void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_th, cv::Mat &gradx, cv::Mat &grady, cv::Mat &bx, cv::Mat &by, cv::Mat& mapR)
 {
     static MatProxy<float> pgx(Align);
@@ -218,31 +224,28 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
     pby.assign(by, 0);
     static MatProxy<uint8_t, int> pres(Align);
     pres.assign(mapR, 0);
-    //std::cout << "Starting magic...\n";
+    std::cout << "Starting magic...\n";
+    auto start = now();
     try
     {
         auto kernel = cl::KernelFunctor<const int, float, float, int, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&>(Kernels, "gradMagic");
-        //auto kernel = cl::KernelFunctor<const int, int, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&>(Kernels, "TestMagic");
         cl::Buffer bpgx(queue, pgx.r_ptr(),   pgx.end(),  true,  true);
         cl::Buffer bpgy(queue, pgy.r_ptr(),   pgy.end(),  true,  true);
         cl::Buffer bbx( queue, pbx.r_ptr(),   pbx.end(),  false, true);
         cl::Buffer bby( queue, pby.r_ptr(),   pby.end(),  false, true);
         cl::Buffer bres(queue, pres.r_ptr(),  pres.end(), false, true);
-        //std::cout << "Ready to call kernel magic...\n";
+        std::cout << "Ready to call kernel magic...\n";
         kernel(cl::EnqueueArgs(queue, cl::NDRange(gpuUsed), cl::NDRange(gpuUsed)), pgx.sizeAligned(), gpu16, gpu1, (is_deeper_magic) ? 1 : 0, alpha_s, fore_th, bpgx, bpgy, bbx, bby, bres).wait();
-        //std::cout << "Call kernel magic ended...\n";
+        std::cout << "Call kernel magic ended...\n";
         cl::copy(bbx,  pbx.w_ptr(),  pbx.end());
         cl::copy(bby,  pby.w_ptr(),  pby.end());
         cl::copy(bres, pres.w_ptr(), pres.end());
-        //std::cout << "Copied data to sysmemory...\n";
+        std::cout << "Copied data to sysmemory...\n";
     }
     CATCHCL
 
     pbx.updateMatrixIfNeeded();
     pby.updateMatrixIfNeeded();
     pres.updateMatrixIfNeeded();
-    //std::cout << "Magic is done...\n";
-    //    for (int i = 0; i < 16; ++i)
-    //        std::cout << *(pgx.w_ptr() + i + mapR.cols * 20 + 50) << " ";
-    //    std::cout << std::endl;
+    std::cout << "Magic is done in (ms): " << now() - start << std::endl;
 }
