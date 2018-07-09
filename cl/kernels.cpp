@@ -73,7 +73,7 @@ cl::Program getCompiledKernels()
                float16 a  = myatan2(y, x);
                float16 a2 = a + pi2;
                int16 c1   = isless(a,  0.f);
-               float16 ar = select(a, 2, c1);
+               float16 ar = select(a, a2, c1);
                vstore16(ar, k, radians + offset);
             }
         }
