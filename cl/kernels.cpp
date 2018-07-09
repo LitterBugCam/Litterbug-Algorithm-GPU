@@ -369,7 +369,9 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
     static MatProxy<uint8_t, int> pres(Align);
     pres.assign(mapR, 0);
     //std::cout << "Starting magic...\n";
+#ifndef NO_FPS
     auto start = now();
+#endif
     try
     {
         auto kernel = cl::KernelFunctor<const int, float, float, int, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&>(Kernels, "gradMagic");
@@ -396,13 +398,50 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
 #endif
 }
 
-void openCl::sobel2(cv::Mat &gray, cv::Mat &float_out)
+void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angle)
 {
     static MatProxy<uchar> pgray(1);//don't align, will run "rectangular" kernel
     pgray.assign(gray, 0);
 
-    static MatProxy<float> pout(1);
-    pout.assign(float_out, gray.rows, gray.cols);
+    static MatProxy<float> pgradx(1);
+    pgradx.assign(gradx, gray.rows, gray.cols);
 
+    static MatProxy<float> pgrady(1);
+    pgrady.assign(grady, gray.rows, gray.cols);
+
+    static MatProxy<float> pangle(1);
+    pangle.assign(angle, gray.rows, gray.cols);
+
+    auto gpus = gpuUsed;
+    while ((gray.rows * gray.cols) % gpus != 0)
+        --gpus;
+#ifndef NO_FPS
+    auto start = now();
+#endif
+    try
+    {
+        auto kernel = cl::KernelFunctor<cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&>(Kernels, "SobelDetector");
+        cl::Buffer bgray (queue,  pgray.r_ptr(),    pgray.end(),  true,  true);
+        cl::Buffer bgradx( queue, pgradx.w_ptr(),   pgradx.end(), false, true);
+        cl::Buffer bgrady( queue, pgrady.w_ptr(),   pgrady.end(), false, true);
+        cl::Buffer bangle( queue, pangle.w_ptr(),   pangle.end(), false, true);
+
+        kernel(cl::EnqueueArgs(queue, cl::NDRange(gray.cols, gray.rows), cl::NDRange(gpus)),  bgray, bgradx, bgrady, bangle).wait();
+        //std::cout << "Call kernel magic ended...\n";
+        cl::copy(bgradx,  pgradx.w_ptr(),  pgradx.end());
+        cl::copy(bgrady,  pgrady.w_ptr(),  pgrady.end());
+        cl::copy(bangle,  pangle.w_ptr(),  pangle.end());
+
+        //std::cout << "Copied data to sysmemory...\n";
+    }
+    CATCHCL
+
+    pgradx.updateMatrixIfNeeded();
+    pgrady.updateMatrixIfNeeded();
+    pangle.updateMatrixIfNeeded();
+
+#ifndef NO_FPS
+    std::cout << "Sobels done in (ms): " << now() - start << std::endl;
+#endif
 
 }

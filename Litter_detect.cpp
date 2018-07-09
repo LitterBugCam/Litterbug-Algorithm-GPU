@@ -137,10 +137,11 @@ static void execute(const char* videopath, std::ofstream& results)
             gray = gray.mul(1.5f);
 
 
-        cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
-        cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
-        cl->atan2(grad_x, grad_y, angles.getStorage());
+        //        cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
+        //        cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
+        //        cl->atan2(grad_x, grad_y, angles.getStorage());
 
+        cl->sobel2(gray, grad_x, grad_y, angles.getStorage());
         if (i == 0)
         {
             // X direction
