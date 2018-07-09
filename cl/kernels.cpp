@@ -65,14 +65,16 @@ cl::Program getCompiledKernels()
             private const int elements_count = (int)(total * gpu16); //total / (gpu_used * 16);
             private const int offset = (int)(i * total * gpu1);      //i * total / gpu_used;
 
-            const float pi2 = 2 * 3.14159265f;
+            const float16 pi2 = 2 * 3.14159265f;
             for (size_t k = 0; k < elements_count; ++k)
             {
                private float16 x = vload16( k , gradx + offset);
                private float16 y = vload16( k , grady + offset);
                float16 a  = myatan2(y, x);
-               a = select(a, a + pi2, isless(a,  0));
-               vstore16(a, k, radians + offset);
+               float16 a2 = a + pi2;
+               int16 c1   = isless(a,  0.f);
+               float16 ar = select(a, 2, c1);
+               vstore16(ar, k, radians + offset);
             }
         }
         )CLC",
