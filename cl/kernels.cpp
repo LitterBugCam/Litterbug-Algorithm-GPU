@@ -204,10 +204,10 @@ cl::Program getCompiledKernels()
         R"CLC(
         __kernel void SobelDetector( __global const uchar* restrict input,  __global float* restrict grad_x,  __global float* restrict grad_y,  __global float* restrict grad_dir)
         {
-            uint x      = get_global_id(0) + 1;
-            uint y      = get_global_id(1) + 1;
-            uint width  = get_global_size(0) + 2;
-
+            uint x      = get_global_id(0);
+            uint y      = get_global_id(1);
+            uint width  = get_global_size(0);
+            uint height = get_global_size(1);
             // Given that we know the (x,y) coordinates of the pixel we're
             // looking at, its natural to use (x,y) to look at its
             // neighbouring pixels
@@ -218,6 +218,8 @@ cl::Program getCompiledKernels()
             // OpenGL where i00 refers
             // to the top-left-hand corner and iterates through to the bottom
             // right-hand corner
+            if( x >= 1 && x < (width-1) && y >= 1 && y < height - 1)
+            {
             float i00 = input[(x - 1) + (y - 1) * width];
             float i10 = input[x + (y - 1) * width];
             float i20 = input[(x + 1) + (y - 1) * width];
@@ -227,6 +229,7 @@ cl::Program getCompiledKernels()
             float i02 = input[(x - 1) + (y + 1) * width];
             float i12 = input[x + (y + 1) * width];
             float i22 = input[(x + 1) + (y + 1) * width];
+
                 // To understand why the masks are applied this way, look
                 // at the mask for Gy and Gx which are respectively equal
                 // to the matrices:
@@ -242,6 +245,7 @@ cl::Program getCompiledKernels()
             float a = myatan2f1(Gy, Gx);
             a = (a, a + 6.2831853f, a < 0);
             grad_dir[out_index] = a;
+            }
        }
       )CLC",
     };
@@ -420,8 +424,8 @@ void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angl
     pangle.assign(angle, gray.rows, gray.cols);
 
     static auto gpus = gpuUsed;
-    int width  = gray.cols - 2;
-    int height = gray.rows - 2;
+    int width  = gray.cols;
+    int height = gray.rows;
 
     std::cout << "Gpus used for sobel: " << gpus <<  " " << width << "; " << height << std::endl;
 
