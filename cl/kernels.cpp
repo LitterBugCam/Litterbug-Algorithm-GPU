@@ -419,11 +419,10 @@ void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angl
     static MatProxy<float> pangle(1);
     pangle.assign(angle, gray.rows, gray.cols);
 
-    auto gpus = gpuUsed;
+    static auto gpus = gpuUsed;
     int width  = gray.cols - 2;
     int height = gray.rows - 2;
-    while ((height * width) % gpus != 0)
-        --gpus;
+
     std::cout << "Gpus used for sobel: " << gpus <<  " " << width << "; " << height << std::endl;
 
     try
@@ -433,17 +432,25 @@ void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angl
         cl::Buffer bgradx( queue, pgradx.w_ptr(),   pgradx.end(), false, true);
         cl::Buffer bgrady( queue, pgrady.w_ptr(),   pgrady.end(), false, true);
         cl::Buffer bangle( queue, pangle.w_ptr(),   pangle.end(), false, true);
-#ifdef DESKTOP_BUILD
-        kernel(cl::EnqueueArgs(queue, cl::NDRange(width, height), cl::NDRange(2)),  bgray, bgradx, bgrady, bangle).wait();
-#else
-        kernel(cl::EnqueueArgs(queue, cl::NDRange(width, height), cl::NDRange(gpus)),  bgray, bgradx, bgrady, bangle).wait();
-#endif
-        //std::cout << "Call kernel magic ended...\n";
+        while (true)
+            try
+            {
+                kernel(cl::EnqueueArgs(queue, cl::NDRange(width, height), cl::NDRange(gpus)),  bgray, bgradx, bgrady, bangle).wait();
+                break;
+            }
+            catch (cl::Error& err)
+            {
+                if (err.err() == -54)
+                {
+                    --gpus;
+                    continue;
+                }
+                throw err;
+            }
+
         cl::copy(bgradx,  pgradx.w_ptr(),  pgradx.end());
         cl::copy(bgrady,  pgrady.w_ptr(),  pgrady.end());
         cl::copy(bangle,  pangle.w_ptr(),  pangle.end());
-
-        //std::cout << "Copied data to sysmemory...\n";
     }
     CATCHCL
 
