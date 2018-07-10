@@ -61,6 +61,7 @@ const static std::map<std::string, std::function<void(const std::string& src)>> 
 #undef DECLARE_PARAM
 
 std::shared_ptr<openCl> cl(nullptr);
+extern int32_t now();
 
 static void execute(const char* videopath, std::ofstream& results)
 {
@@ -136,12 +137,19 @@ static void execute(const char* videopath, std::ofstream& results)
         if (low_light)
             gray = gray.mul(1.5f);
 
+#ifndef NO_FPS
+        auto start = now();
+#endif
 
-        //        cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
-        //        cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
-        //        cl->atan2(grad_x, grad_y, angles.getStorage());
+        //cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
+        //cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
+        //cl->atan2(grad_x, grad_y, angles.getStorage());
 
+        //this is 2x faster on i7 (4ms and 9ms)
         cl->sobel2(gray, grad_x, grad_y, angles.getStorage());
+#ifndef NO_FPS
+        std::cout << "Magic is done in (ms): " << now() - start << std::endl;
+#endif
         if (i == 0)
         {
             // X direction

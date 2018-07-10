@@ -40,6 +40,7 @@ else {
     QMAKE_CXXFLAGS_RELEASE = -O3 -march=native
 }
 
+DEFINES += DESKTOP_BUILD
 
 openmp {
 message( "Building using OpenMP" )

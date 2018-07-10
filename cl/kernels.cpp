@@ -35,13 +35,28 @@ cl::Program getCompiledKernels()
                                                  return atrue * cond + afalse * not_cond;
                                              }
 
+                                             float16 myselectf1(float afalse, float atrue, int condition)
+                                             {
+                                                 float cond = condition * condition;
+                                                 float not_cond = 1.f - cond;
+                                                 return atrue * cond + afalse * not_cond;
+                                             }
+
                                              int16 myselecti16(int16 afalse, int16 atrue, int16 condition)
                                              {
                                                  //we have -1 = true in condition ...it should be so
-                                                 int16 cond     = -1 * condition;
+                                                 int16 cond     = condition * condition;
                                                  int16 not_cond = 1 - cond;
                                                  return atrue * cond + afalse * not_cond;
                                              }
+
+                                             int16 myselecti1(int afalse, int atrue, int condition)
+                                             {
+                                                 int16 cond     = condition * condition;
+                                                 int16 not_cond = 1 - cond;
+                                                 return atrue * cond + afalse * not_cond;
+                                             }
+
                                              //nvidia ref. impl.: http://developer.download.nvidia.com/cg/atan2.html
                                              float16 myatan2f16(float16 y, float16 x)
                                              {
@@ -189,10 +204,9 @@ cl::Program getCompiledKernels()
         R"CLC(
         __kernel void SobelDetector( __global const uchar* restrict input,  __global float* restrict grad_x,  __global float* restrict grad_y,  __global float* restrict grad_dir)
         {
-            uint x      = get_global_id(0);
-            uint y      = get_global_id(1);
-            uint width  = get_global_size(0);
-            uint height = get_global_size(1);
+            uint x      = get_global_id(0) + 1;
+            uint y      = get_global_id(1) + 1;
+            uint width  = get_global_size(0) + 2;
 
             // Given that we know the (x,y) coordinates of the pixel we're
             // looking at, its natural to use (x,y) to look at its
@@ -204,33 +218,30 @@ cl::Program getCompiledKernels()
             // OpenGL where i00 refers
             // to the top-left-hand corner and iterates through to the bottom
             // right-hand corner
-            if( x >= 1 && x < (width-1) && y >= 1 && y < height - 1)
-            {
-                float i00 = convert_float(input[(x - 1) + (y - 1) * width]);
-                float i10 = convert_float(input[x + (y - 1) * width]);
-                float i20 = convert_float(input[(x + 1) + (y - 1) * width]);
-                float i01 = convert_float(input[(x - 1) + y * width]);
-                float i11 = convert_float(input[x + y * width]);
-                float i21 = convert_float(input[(x + 1) + y * width]);
-                float i02 = convert_float(input[(x - 1) + (y + 1) * width]);
-                float i12 = convert_float(input[x + (y + 1) * width]);
-                float i22 = convert_float(input[(x + 1) + (y + 1) * width]);
+            float i00 = input[(x - 1) + (y - 1) * width];
+            float i10 = input[x + (y - 1) * width];
+            float i20 = input[(x + 1) + (y - 1) * width];
+            float i01 = input[(x - 1) + y * width];
+            float i11 = input[x + y * width];
+            float i21 = input[(x + 1) + y * width];
+            float i02 = input[(x - 1) + (y + 1) * width];
+            float i12 = input[x + (y + 1) * width];
+            float i22 = input[(x + 1) + (y + 1) * width];
                 // To understand why the masks are applied this way, look
                 // at the mask for Gy and Gx which are respectively equal
                 // to the matrices:
                 // { {-1, 0, 1}, { {-1,-2,-1},
                 // {-2, 0, 2}, { 0, 0, 0},
                 // {-1, 0, 1}} { 1, 2, 1}}
-                uint out_index = x + y *width;
-                float Gx = i00 + (float)(2) * i10 + i20 - i02 - (float)(2) * i12 -i22;
-                float Gy = i00 - i20 + (float)(2)*i01 - (float)(2)*i21 + i02 - i22;
+            uint out_index = x + y *width;
+            float Gx = i00 + 2.f * i10 + i20 - i02 - 2.f * i12 -i22;
+            float Gy = i00 - i20 + 2.f*i01 - 2.f*i21 + i02 - i22;
 
-                grad_x[out_index] = Gx;
-                grad_y[out_index] = Gy;
-                float a = myatan2f1(Gy, Gx);
-                if ( a < 0) a += 6.2831853f;
-                grad_dir[out_index] = a;
-            }
+            grad_x[out_index] = Gx;
+            grad_y[out_index] = Gy;
+            float a = myatan2f1(Gy, Gx);
+            a = (a, a + 6.2831853f, a < 0);
+            grad_dir[out_index] = a;
        }
       )CLC",
     };
@@ -350,7 +361,7 @@ void openCl::atan2(cv::Mat &gradx, cv::Mat &grady, cv::Mat &angle)
 
 }
 
-static int32_t now()
+int32_t now()
 {
     return  std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
@@ -392,9 +403,6 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
     pbx.updateMatrixIfNeeded();
     pby.updateMatrixIfNeeded();
     pres.updateMatrixIfNeeded();
-#ifndef NO_FPS
-    std::cout << "Magic is done in (ms): " << now() - start << std::endl;
-#endif
 }
 
 void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angle)
@@ -412,12 +420,12 @@ void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angl
     pangle.assign(angle, gray.rows, gray.cols);
 
     auto gpus = gpuUsed;
-    while ((gray.rows * gray.cols) % gpus != 0)
+    int width  = gray.cols - 2;
+    int height = gray.rows - 2;
+    while ((height * width) % gpus != 0)
         --gpus;
-    std::cout << "Gpus used for sobel: " << gpus << std::endl;
-#ifndef NO_FPS
-    auto start = now();
-#endif
+    std::cout << "Gpus used for sobel: " << gpus <<  " " << width << "; " << height << std::endl;
+
     try
     {
         auto kernel = cl::KernelFunctor<cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&>(Kernels, "SobelDetector");
@@ -425,8 +433,11 @@ void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angl
         cl::Buffer bgradx( queue, pgradx.w_ptr(),   pgradx.end(), false, true);
         cl::Buffer bgrady( queue, pgrady.w_ptr(),   pgrady.end(), false, true);
         cl::Buffer bangle( queue, pangle.w_ptr(),   pangle.end(), false, true);
-
-        kernel(cl::EnqueueArgs(queue, cl::NDRange(gray.cols, gray.rows), cl::NDRange(gpus)),  bgray, bgradx, bgrady, bangle).wait();
+#ifdef DESKTOP_BUILD
+        kernel(cl::EnqueueArgs(queue, cl::NDRange(width, height), cl::NDRange(2)),  bgray, bgradx, bgrady, bangle).wait();
+#else
+        kernel(cl::EnqueueArgs(queue, cl::NDRange(width, height), cl::NDRange(gpus)),  bgray, bgradx, bgrady, bangle).wait();
+#endif
         //std::cout << "Call kernel magic ended...\n";
         cl::copy(bgradx,  pgradx.w_ptr(),  pgradx.end());
         cl::copy(bgrady,  pgrady.w_ptr(),  pgrady.end());
@@ -439,8 +450,5 @@ void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angl
     pgradx.updateMatrixIfNeeded();
     pgrady.updateMatrixIfNeeded();
     pangle.updateMatrixIfNeeded();
-#ifndef NO_FPS
-    std::cout << "Sobel2 is done in (ms): " << now() - start << std::endl;
-#endif
 
 }
