@@ -138,15 +138,19 @@ static void execute(const char* videopath, std::ofstream& results)
         if (low_light)
             gray = gray.mul(1.5f);
 
+        const bool is_deeper_magic = (i % framemod2 == 0);
+        assert(abandoned_map.isContinuous());
+        auto plain_map_ptr = abandoned_map.ptr<uchar>();
+
 #ifndef NO_FPS
         {
             TimeMeasure tm("Sobel");
 #endif
 
             //for now we can use custom kernel when image size is multiply of 16
-            if (is16)
-                cl->sobel2(gray, grad_x, grad_y, angles.getStorage());
-            else
+            //            if (is16)
+            //                cl->sobel2(gray, grad_x, grad_y, angles.getStorage());
+            //            else
             {
                 //this is 214ms on PI
                 cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
@@ -154,66 +158,65 @@ static void execute(const char* videopath, std::ofstream& results)
                 cl->atan2(grad_x, grad_y, angles.getStorage());
             }
 
-#ifndef NO_FPS
-        }
-#endif
-        if (i == 0)
-        {
-            // X direction
-            grad_x.copyTo(B_Sx);
-
-            // Y direction
-            grad_y.copyTo(B_Sy);
-        }
-        else
-        {
-            const bool is_deeper_magic = (i % framemod2 == 0);
-            //cl->magic(is_deeper_magic, alpha_S, fore_th, grad_x, grad_y, B_Sx, B_Sy, abandoned_map);
-
-            D_Sx = grad_x - B_Sx;
-            B_Sx = B_Sx + alpha_S * D_Sx;
-
-            D_Sy = grad_y - B_Sy;
-            B_Sy = B_Sy + alpha_S * D_Sy;
-            assert(grad_x.isContinuous());
-            assert(grad_y.isContinuous());
-            auto grad_x_ptr = grad_x.ptr<float>();
-            auto grad_y_ptr = grad_y.ptr<float>();
-
-            assert(abandoned_map.isContinuous());
-            auto plain_map_ptr = abandoned_map.ptr<uchar>();
-
-            if (is_deeper_magic)
+            if (i == 0)
             {
+                // X direction
+                grad_x.copyTo(B_Sx);
 
-
-                assert(D_Sx.isContinuous());
-                assert(D_Sy.isContinuous());
-
-
-                auto D_Sx_ptr = D_Sx.ptr<float>();
-                auto D_Sy_ptr = D_Sy.ptr<float>();
-
-                for (auto k = 0; k < image.rows * image.cols; ++k)
-                {
-                    auto point = plain_map_ptr + k;
-                    if (*point) //overflow prot
-                        *point -= 1;
-
-                    //prevening overflow here
-                    //btw original code COULD overflow on whites...
-                    if ((std::abs(*(D_Sx_ptr + k)) > fore_th && std::abs(*(grad_x_ptr + k)) > 19) ||
-                            (std::abs(*(D_Sy_ptr + k)) > fore_th && std::abs(*(grad_y_ptr + k)) > 19))
-                    {
-                        if (*point < 254)
-                            *point += 2;
-                        else
-                            *point = 255;
-                    }
-
-
-                }
+                // Y direction
+                grad_y.copyTo(B_Sy);
             }
+            else
+            {
+                //cl->magic(is_deeper_magic, alpha_S, fore_th, grad_x, grad_y, B_Sx, B_Sy, abandoned_map);
+
+                D_Sx = grad_x - B_Sx;
+                B_Sx = B_Sx + alpha_S * D_Sx;
+
+                D_Sy = grad_y - B_Sy;
+                B_Sy = B_Sy + alpha_S * D_Sy;
+                assert(grad_x.isContinuous());
+                assert(grad_y.isContinuous());
+                auto grad_x_ptr = grad_x.ptr<float>();
+                auto grad_y_ptr = grad_y.ptr<float>();
+
+
+
+                if (is_deeper_magic)
+                {
+
+
+                    assert(D_Sx.isContinuous());
+                    assert(D_Sy.isContinuous());
+
+
+                    auto D_Sx_ptr = D_Sx.ptr<float>();
+                    auto D_Sy_ptr = D_Sy.ptr<float>();
+
+                    for (auto k = 0; k < image.rows * image.cols; ++k)
+                    {
+                        auto point = plain_map_ptr + k;
+                        if (*point) //overflow prot
+                            *point -= 1;
+
+                        //prevening overflow here
+                        //btw original code COULD overflow on whites...
+                        if ((std::abs(*(D_Sx_ptr + k)) > fore_th && std::abs(*(grad_x_ptr + k)) > 19) ||
+                                (std::abs(*(D_Sy_ptr + k)) > fore_th && std::abs(*(grad_y_ptr + k)) > 19))
+                        {
+                            if (*point < 254)
+                                *point += 2;
+                            else
+                                *point = 255;
+                        }
+
+
+                    }
+                }
+#ifndef NO_FPS
+            }
+#endif
+
             if (i > frameinit && is_deeper_magic)
             {
 
