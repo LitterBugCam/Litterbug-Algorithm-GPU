@@ -77,14 +77,8 @@ static void execute(const char* videopath, std::ofstream& results)
     const auto fps         = std::max(1l, static_cast<long>(capture.get(CV_CAP_PROP_FPS)));
     capture.set(CV_CAP_PROP_BUFFERSIZE, 1);
 
-#ifndef NO_GUI
-    cv::Mat image; //current opencl on pi do not handle UMat for images
-#else
-    cv::Mat& image = gray;
-#endif
+    cv::Mat image;
     cv::Mat frame;
-
-
 
     capture >> image;
     if (image.empty())
