@@ -452,7 +452,9 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, const float alpha_s, con
 
     pbx.updateMatrixIfNeeded();
     pby.updateMatrixIfNeeded();
-    pmapR.updateMatrixIfNeeded();
+
+    if (is_plus2 || is_minus1)
+        pmapR.updateMatrixIfNeeded();
 
     if (!useOrigin)
     {
