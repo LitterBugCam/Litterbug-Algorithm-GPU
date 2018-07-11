@@ -115,7 +115,7 @@ static void execute(const char* videopath, std::ofstream& results)
 #endif
 
     cv::Mat abandoned_map = cv::Mat(image.rows, image.cols, CV_8UC1, cv::Scalar(0));
-    const bool is16 = (image.cols % 16 == 0);
+    //const bool is16 = (image.cols % 16 == 0);
 
     for (fullbits_int_t i = 0; !image.empty(); ++i, (capture >> image))
     {
@@ -141,25 +141,18 @@ static void execute(const char* videopath, std::ofstream& results)
         const bool is_deeper_magic = (i % framemod2 == 0);
         assert(abandoned_map.isContinuous());
         auto plain_map_ptr = abandoned_map.ptr<uchar>();
-
+        //ok, original sobel + magic takes 550 - 650 ms
 #ifndef NO_FPS
         {
-            TimeMeasure tm("Sobel");
+            TimeMeasure tm("SobelMagic");
 #endif
-
-            //for now we can use custom kernel when image size is multiply of 16
-            //            if (is16)
-            //                cl->sobel2(gray, grad_x, grad_y, angles.getStorage());
-            //            else
-            {
-                //this is 214ms on PI
-                cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
-                cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
-                cl->atan2(grad_x, grad_y, angles.getStorage());
-            }
 
             if (i == 0)
             {
+                cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
+                cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
+                cl->atan2(grad_x, grad_y, angles.getStorage());
+
                 // X direction
                 grad_x.copyTo(B_Sx);
 
@@ -167,141 +160,97 @@ static void execute(const char* videopath, std::ofstream& results)
                 grad_y.copyTo(B_Sy);
             }
             else
-            {
-                //cl->magic(is_deeper_magic, alpha_S, fore_th, grad_x, grad_y, B_Sx, B_Sy, abandoned_map);
-
-                D_Sx = grad_x - B_Sx;
-                B_Sx = B_Sx + alpha_S * D_Sx;
-
-                D_Sy = grad_y - B_Sy;
-                B_Sy = B_Sy + alpha_S * D_Sy;
-                assert(grad_x.isContinuous());
-                assert(grad_y.isContinuous());
-                auto grad_x_ptr = grad_x.ptr<float>();
-                auto grad_y_ptr = grad_y.ptr<float>();
-
-
-
-                if (is_deeper_magic)
-                {
-
-
-                    assert(D_Sx.isContinuous());
-                    assert(D_Sy.isContinuous());
-
-
-                    auto D_Sx_ptr = D_Sx.ptr<float>();
-                    auto D_Sy_ptr = D_Sy.ptr<float>();
-
-                    for (auto k = 0; k < image.rows * image.cols; ++k)
-                    {
-                        auto point = plain_map_ptr + k;
-                        if (*point) //overflow prot
-                            *point -= 1;
-
-                        //prevening overflow here
-                        //btw original code COULD overflow on whites...
-                        if ((std::abs(*(D_Sx_ptr + k)) > fore_th && std::abs(*(grad_x_ptr + k)) > 19) ||
-                                (std::abs(*(D_Sy_ptr + k)) > fore_th && std::abs(*(grad_y_ptr + k)) > 19))
-                        {
-                            if (*point < 254)
-                                *point += 2;
-                            else
-                                *point = 255;
-                        }
-
-
-                    }
-                }
+                cl->sobel2magic(is_deeper_magic, alpha_S, fore_th, gray, grad_x, grad_y, angles.getStorage(), B_Sx, B_Sy, abandoned_map);
 #ifndef NO_FPS
-            }
-#endif
-
-            if (i > frameinit && is_deeper_magic)
-            {
-
-                for (fullbits_int_t j = 1; j < image.rows - 1; ++j)
-                {
-                    plain_map_ptr += image.cols;
-                    for (fullbits_int_t k = 1; k < image.cols - 1; ++k)
-                    {
-                        auto point = plain_map_ptr + k;
-
-                        //hmm, this code can be removed for test image - same result
-                        if (*point > aotime2 && *point < aotime)
-                            for (fullbits_int_t c0 = -1; c0 <= 1; ++c0)
-                            {
-                                if (c0 && *(point + c0) > aotime) //excluding c0 = 0 which is meself
-                                {
-                                    *point = aotime;
-                                    break;
-                                }
-
-                                if (*(point + image.cols + c0) > aotime )
-                                {
-                                    *point = aotime;
-                                    break;
-                                }
-
-                                if (*(point - image.cols + c0) > aotime )
-                                {
-                                    *point = aotime;
-                                    break;
-                                }
-                            }
-                    }
-                }
-            }
-
-
-            cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
-            abandoned_objects.populateObjects(frame, i);
-
-            cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
-            cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
-
-#ifndef NO_GUI
-            image.copyTo(frame);
-#endif
-            for (auto& atu : abandoned_objects.candidat)
-            {
-                if (!atu.isTooSmall(minsize))
-                {
-                    es_param_t params = atu.getScoreParams(image.rows, image.cols);
-                    edge_segments(object_map, angles, canny, params);
-                    if (params.score > staticness_th && params.circularity > objectness_th && params.circularity < 1000000)
-                    {
-                        //hm, lets do cheat, if we display object then +1 to life
-                        atu.extraLife();
-                        results << " x: " << params.rr << " y: " << params.cc << " w: " << params.w << " h: " << params.h << std::endl;
-#ifndef NO_GUI
-                        const static cv::Scalar color(0, 0, 255);
-                        cv::rectangle(frame, cv::Rect(atu.origin, atu.endpoint), color, 2);
-#endif
-                    }
-                }
-            }
-#ifndef NO_GUI
-#ifndef NO_FPS
-            const std::string text = "FPS: " + std::to_string(meanfps / (i + 1)) + ", candidats count: " + std::to_string(abandoned_objects.candidat.size());
-#else
-            const std::string text = "Candidats count: " + std::to_string(abandoned_objects.candidat.size());
-#endif
-            cv::putText(frame,
-                        text,
-                        cv::Point(5, 20), // Coordinates
-                        cv::FONT_HERSHEY_COMPLEX_SMALL, // Font
-                        1.0, // Scale. 2.0 = 2x bigger
-                        cv::Scalar(255, 255, 255), // BGR Color
-                        1, // Line Thickness
-                        CV_AA); // Anti-alias
-
-            cv::imshow("output", frame);//ok,those 2 take around -5 fps on i7
-            //cv::imshow("output", abandoned_map);
-            if (27 == cv::waitKey(10))
-                break;
-#endif
         }
+#endif
+
+        if (i > frameinit && is_deeper_magic)
+        {
+
+            for (fullbits_int_t j = 1; j < image.rows - 1; ++j)
+            {
+                plain_map_ptr += image.cols;
+                for (fullbits_int_t k = 1; k < image.cols - 1; ++k)
+                {
+                    auto point = plain_map_ptr + k;
+
+                    //hmm, this code can be removed for test image - same result
+                    if (*point > aotime2 && *point < aotime)
+                        for (fullbits_int_t c0 = -1; c0 <= 1; ++c0)
+                        {
+                            if (c0 && *(point + c0) > aotime) //excluding c0 = 0 which is meself
+                            {
+                                *point = aotime;
+                                break;
+                            }
+
+                            if (*(point + image.cols + c0) > aotime )
+                            {
+                                *point = aotime;
+                                break;
+                            }
+
+                            if (*(point - image.cols + c0) > aotime )
+                            {
+                                *point = aotime;
+                                break;
+                            }
+                        }
+                }
+            }
+        }
+
+
+        cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
+        abandoned_objects.populateObjects(frame, i);
+        cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
+
+        cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
+
+
+#ifndef NO_GUI
+        image.copyTo(frame);
+#endif
+        for (auto& atu : abandoned_objects.candidat)
+        {
+            if (!atu.isTooSmall(minsize))
+            {
+                es_param_t params = atu.getScoreParams(image.rows, image.cols);
+                edge_segments(object_map, angles, canny, params);
+                if (params.score > staticness_th && params.circularity > objectness_th && params.circularity < 1000000)
+                {
+                    //hm, lets do cheat, if we display object then +1 to life
+                    atu.extraLife();
+                    results << " x: " << params.rr << " y: " << params.cc << " w: " << params.w << " h: " << params.h << std::endl;
+#ifndef NO_GUI
+                    const static cv::Scalar color(0, 0, 255);
+                    cv::rectangle(frame, cv::Rect(atu.origin, atu.endpoint), color, 2);
+#endif
+                }
+            }
+        }
+#ifndef NO_GUI
+#ifndef NO_FPS
+        const std::string text = "FPS: " + std::to_string(meanfps / (i + 1)) + ", candidats count: " + std::to_string(abandoned_objects.candidat.size());
+#else
+        const std::string text = "Candidats count: " + std::to_string(abandoned_objects.candidat.size());
+#endif
+        cv::putText(frame,
+                    text,
+                    cv::Point(5, 20), // Coordinates
+                    cv::FONT_HERSHEY_COMPLEX_SMALL, // Font
+                    1.0, // Scale. 2.0 = 2x bigger
+                    cv::Scalar(255, 255, 255), // BGR Color
+                    1, // Line Thickness
+                    CV_AA); // Anti-alias
+
+        cv::imshow("output", frame);//ok,those 2 take around -5 fps on i7
+        //cv::imshow("output", abandoned_map);
+        if (27 == cv::waitKey(10))
+            break;
+#endif
+
 
 #ifndef NO_FPS
         t = ((double) cv::getTickCount() - t) / cv::getTickFrequency();
