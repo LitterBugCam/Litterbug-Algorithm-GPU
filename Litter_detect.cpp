@@ -188,6 +188,8 @@ static void execute(const char* videopath, std::ofstream& results)
         abandoned_objects.populateObjects(frame, i);
 
 #ifndef NO_GUI
+        //!!!!!!!!!!!!!!VISUAL CONTROL HERE, make copy of needed Mat to frame and comment others
+        //! to see pictures of what's going on (to display frame itself - just comment all)
         //abandoned_map.copyTo(frame);
         image.copyTo(frame);
 #endif
