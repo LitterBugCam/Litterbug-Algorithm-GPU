@@ -204,10 +204,13 @@ cl::Program getCompiledKernels()
         R"CLC(
         __kernel void SobelDetector( __global const uchar* restrict input,  __global float* restrict grad_x,  __global float* restrict grad_y,  __global float* restrict grad_dir)
         {
-            uint x      = get_global_id(0);
-            uint y      = get_global_id(1);
-            uint width  = get_global_size(0);
-            uint height = get_global_size(1);
+            uint x      = get_global_id(0) + 1;
+            uint y      = get_global_id(1) + 1;
+            uint width  = get_global_size(0) + 2;
+
+
+            uint out_index = (x - 1) + (y - 1) * (width - 2);
+
             // Given that we know the (x,y) coordinates of the pixel we're
             // looking at, its natural to use (x,y) to look at its
             // neighbouring pixels
@@ -218,8 +221,7 @@ cl::Program getCompiledKernels()
             // OpenGL where i00 refers
             // to the top-left-hand corner and iterates through to the bottom
             // right-hand corner
-            if( x >= 1 && x < (width-1) && y >= 1 && y < height - 1)
-            {
+
             float i00 = input[(x - 1) + (y - 1) * width];
             float i10 = input[x + (y - 1) * width];
             float i20 = input[(x + 1) + (y - 1) * width];
@@ -236,7 +238,7 @@ cl::Program getCompiledKernels()
                 // { {-1, 0, 1}, { {-1,-2,-1},
                 // {-2, 0, 2}, { 0, 0, 0},
                 // {-1, 0, 1}} { 1, 2, 1}}
-            uint out_index = x + y *width;
+
             float Gx = i00 + 2.f * i10 + i20 - i02 - 2.f * i12 -i22;
             float Gy = i00 - i20 + 2.f*i01 - 2.f*i21 + i02 - i22;
 
@@ -245,7 +247,7 @@ cl::Program getCompiledKernels()
             float a = myatan2f1(Gy, Gx);
             a = (a, a + 6.2831853f, a < 0);
             grad_dir[out_index] = a;
-            }
+
        }
       )CLC",
     };
@@ -330,9 +332,6 @@ openCl::openCl()
     Kernels = getCompiledKernels();
 }
 
-openCl::~openCl()
-{
-}
 
 void openCl::atan2(cv::Mat &gradx, cv::Mat &grady, cv::Mat &angle)
 {
@@ -411,8 +410,11 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
 
 void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angle)
 {
+    static cv::Mat gray_buf(gray.rows + 2, gray.cols + 2, gray.depth());
+    copyMakeBorder(gray, gray_buf, 1, 1, 1, 1, cv::BORDER_REPLICATE);
+
     static MatProxy<uchar> pgray(1);//don't align, will run "rectangular" kernel
-    pgray.assign(gray, 0);
+    pgray.assign(gray_buf, 0);
 
     static MatProxy<float> pgradx(1);
     pgradx.assign(gradx, gray.rows, gray.cols);
@@ -424,10 +426,7 @@ void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angl
     pangle.assign(angle, gray.rows, gray.cols);
 
     static auto gpus = gpuUsed;
-    int width  = gray.cols;
-    int height = gray.rows;
-
-    std::cout << "Gpus used for sobel: " << gpus <<  " " << width << "; " << height << std::endl;
+    //std::cout << "Gpus used for sobel: " << gpus <<  " " << width << "; " << height << std::endl;
 
     try
     {
@@ -439,7 +438,7 @@ void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angl
         while (true)
             try
             {
-                kernel(cl::EnqueueArgs(queue, cl::NDRange(width, height), cl::NDRange(gpus)),  bgray, bgradx, bgrady, bangle).wait();
+                kernel(cl::EnqueueArgs(queue, cl::NDRange(gray.cols, gray.rows), cl::NDRange(gpus)),  bgray, bgradx, bgrady, bangle).wait();
                 break;
             }
             catch (cl::Error& err)
