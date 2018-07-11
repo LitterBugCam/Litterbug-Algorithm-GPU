@@ -101,7 +101,6 @@ static void execute(const char* videopath, std::ofstream& results)
     //however, lets say 1 second of real time video
     objects abandoned_objects(framesCount, fps * std::max(fps_life, 0.01f));
 
-    cv::Mat B_Sx, B_Sy;
     cv::Mat grad_x, grad_y;
     cv::Mat D_Sx, D_Sy;
 
@@ -152,15 +151,9 @@ static void execute(const char* videopath, std::ofstream& results)
                 cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
                 cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
                 cl->atan2(grad_x, grad_y, angles.getStorage());
-
-                // X direction
-                grad_x.copyTo(B_Sx);
-
-                // Y direction
-                grad_y.copyTo(B_Sy);
             }
             else
-                cl->sobel2magic(is_deeper_magic, alpha_S, fore_th, gray, grad_x, grad_y, angles.getStorage(), B_Sx, B_Sy, abandoned_map);
+                cl->sobel2magic(is_deeper_magic, alpha_S, fore_th, gray, grad_x, grad_y, angles.getStorage(), abandoned_map);
 #ifndef NO_FPS
         }
 #endif

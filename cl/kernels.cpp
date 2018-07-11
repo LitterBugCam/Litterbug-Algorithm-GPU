@@ -146,7 +146,7 @@ cl::Program getCompiledKernels()
         R"CLC(
         __kernel void SobelAndMagicDetector(const int is_deeper_magic, const float alpha_s, const float fore_th, __global const uchar16* restrict input,  __global float16* restrict grad_x,
                                              __global  float16* restrict grad_y,  __global float16* restrict grad_dir,
-                                              __global float16* BSx,  __global float16* BSy, __global uchar16* mapRes
+                                              __global float16* restrict BSx,     __global float16* restrict BSy, __global uchar16* restrict mapRes
                                            )
         {
             uint dstXStride = get_global_size(0); //original width / 16
@@ -354,16 +354,30 @@ static int align16(int v)
 
 #define VARS(NAME,TYPE) static cv::Mat a##NAME; static MatProxy<TYPE> p##NAME(1); p##NAME.assign((useOrigin) ? NAME : a##NAME, src.rows, src.cols)
 #define COPY(NAME) a##NAME(roi).copyTo(NAME)
+#define COPYB(NAME) cl::copy(b##NAME,  p##NAME.w_ptr(),  p##NAME.end());
 
-void openCl::sobel2magic(bool is_deeper_magic, const float alpha_s, const float fore_th, cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angle, cv::Mat &bx, cv::Mat &by, cv::Mat& mapR)
+void openCl::sobel2magic(bool is_deeper_magic, const float alpha_s, const float fore_th, cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angle, cv::Mat& mapR)
 {
     const auto aw = align16(gray.cols);
     const auto ah = align16(gray.rows);
-    const bool useOrigin = aw == gray.cols && ah == gray.rows;
-    static cv::Mat aligned(aw, ah, gray.depth());
+
+    const auto dw = aw - gray.cols;
+    const auto dh = ah - gray.rows;
+    const bool useOrigin = (dw == 0) && (dh == 0);
+
+    static cv::Mat aligned(ah, aw, gray.depth());
     cv::Mat& src = (useOrigin) ? gray : aligned;
+
+    VARS(gradx, float);
+    VARS(grady, float);
+    VARS(angle, float);
+    VARS(mapR,  uint8_t);
+
     if (!useOrigin)
-        cv::copyMakeBorder(gray, aligned, 0, ah - gray.rows, 0, aw - gray.cols, cv::BORDER_REPLICATE);
+    {
+        cv::copyMakeBorder(gray, aligned, 0, dh, 0, dw, cv::BORDER_REPLICATE);
+        cv::copyMakeBorder(mapR, amapR, 0, dh, 0, dw,   cv::BORDER_CONSTANT, cv::Scalar(0));
+    }
 
     static cv::Mat gray_buf(src.rows + 2, src.cols + 32, src.depth());
     //3ms on PI
@@ -372,12 +386,25 @@ void openCl::sobel2magic(bool is_deeper_magic, const float alpha_s, const float 
     static MatProxy<uchar> pgray(1);//don't align, will run "rectangular" kernel
     pgray.assign(gray_buf, 0);
 
-    VARS(gradx, float);
-    VARS(grady, float);
-    VARS(angle, float);
-    VARS(bx, float);
-    VARS(by, float);
-    VARS(mapR, uint8_t);
+
+
+    static cv::Mat abx;
+    static cv::Mat aby;
+    static MatProxy<float> pbx(1);
+    pbx.assign(abx, src.rows, src.cols);
+    static MatProxy<float> pby(1);
+    pby.assign(aby, src.rows, src.cols);
+
+    static bool once = true;
+    if (once)
+    {
+        once = false;
+        cv::copyMakeBorder(gradx, abx, 0, dh, 0, dw, cv::BORDER_CONSTANT, cv::Scalar(0));
+        cv::copyMakeBorder(grady, aby, 0, dh, 0, dw, cv::BORDER_CONSTANT, cv::Scalar(0));
+    }
+
+
+
 
     static auto gpus = gpuUsed;
     //std::cout << "Gpus used for sobel: " << gpus << std::endl;
@@ -391,13 +418,14 @@ void openCl::sobel2magic(bool is_deeper_magic, const float alpha_s, const float 
         cl::Buffer bangle( queue, pangle.w_ptr(),   pangle.end(), false, true);
         cl::Buffer bbx( queue, pbx.r_ptr(),   pbx.end(),  false, true);
         cl::Buffer bby( queue, pby.r_ptr(),   pby.end(),  false, true);
-        cl::Buffer bres(queue, pmapR.r_ptr(),  pmapR.end(), false, true);
+        cl::Buffer bmapR(queue, pmapR.r_ptr(),  pmapR.end(), false, true);
+
 
         while (true)
             try
             {
                 kernel(cl::EnqueueArgs(queue, cl::NDRange(gray.cols / 16, gray.rows / 16), cl::NDRange(gpus)), (is_deeper_magic) ? 1 : 0, alpha_s,
-                       fore_th, bgray, bgradx, bgrady, bangle, bbx, bby, bres).wait();
+                       fore_th, bgray, bgradx, bgrady, bangle, bbx, bby, bmapR).wait();
                 break;
             }
             catch (cl::Error& err)
@@ -409,13 +437,12 @@ void openCl::sobel2magic(bool is_deeper_magic, const float alpha_s, const float 
                 }
                 throw err;
             }
-
-        cl::copy(bgradx,  pgradx.w_ptr(),  pgradx.end());
-        cl::copy(bgrady,  pgrady.w_ptr(),  pgrady.end());
-        cl::copy(bangle,  pangle.w_ptr(),  pangle.end());
-        cl::copy(bbx,  pbx.w_ptr(),  pbx.end());
-        cl::copy(bby,  pby.w_ptr(),  pby.end());
-        cl::copy(bres, pmapR.w_ptr(), pmapR.end());
+        COPYB(gradx);
+        COPYB(grady);
+        COPYB(angle);
+        COPYB(bx);
+        COPYB(by);
+        COPYB(mapR);
     }
     CATCHCL
 
@@ -438,10 +465,9 @@ void openCl::sobel2magic(bool is_deeper_magic, const float alpha_s, const float 
         COPY(gradx);
         COPY(grady);
         COPY(angle);
-        COPY(bx);
-        COPY(by);
         COPY(mapR);
     }
 }
 #undef VARS
 #undef COPY
+#undef COPYB
