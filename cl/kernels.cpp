@@ -144,9 +144,10 @@ cl::Program getCompiledKernels()
         //https://software.intel.com/en-us/videos/optimizing-simple-opencl-kernels-sobel-kernel-optimization
 
         R"CLC(
-        __kernel void SobelAndMagicDetector(const int is_minus1, const int is_plus2, const float alpha_s, const float fore_th, __global const uchar16* restrict input,  __global float16* restrict grad_x,
-                                             __global  float16* restrict grad_y,  __global float16* restrict grad_dir,
-                                              __global float16* restrict BSx,     __global float16* restrict BSy, __global uchar16* restrict mapRes
+        #define INP_MEM __global const
+        __kernel void SobelAndMagicDetector(const int is_minus1, const int is_plus2, const int is_first_run, const float alpha_s, const float fore_th,
+                                            INP_MEM uchar16* restrict input, __global float16* restrict grad_dir,
+                                            __global float16* restrict BSx,  __global float16* restrict BSy, __global uchar16* restrict mapRes
                                            )
         {
             uint dstXStride = get_global_size(0); //original width / 16
@@ -162,21 +163,21 @@ cl::Program getCompiledKernels()
             const int16 twos  = 2;
             const int16 twos5 = 255;
 
-            float   a = (( __global const uchar*)(input + srcIndex))[-1];
-            float16 b = convert_float16(vload16(0, ( __global const uchar*)(input + srcIndex)));
-            float   c = (( __global const uchar*)(input + srcIndex))[16];
+            float   a = (( INP_MEM uchar*)(input + srcIndex))[-1];
+            float16 b = convert_float16(vload16(0, ( INP_MEM uchar*)(input + srcIndex)));
+            float   c = (( INP_MEM uchar*)(input + srcIndex))[16];
             srcIndex += srcXStride;
 
-            float   d = (( __global const uchar*)(input + srcIndex))[-1];
-            float16 e = convert_float16(vload16(0, ( __global const uchar*)(input + srcIndex)));
-            float   f = (( __global const uchar*)(input + srcIndex))[16];
+            float   d = (( INP_MEM uchar*)(input + srcIndex))[-1];
+            float16 e = convert_float16(vload16(0, ( INP_MEM uchar*)(input + srcIndex)));
+            float   f = (( INP_MEM uchar*)(input + srcIndex))[16];
 
             for (int k = 0; k < 16; ++k)
             {
             srcIndex += srcXStride;
-            float   g = (( __global const uchar*)(input + srcIndex))[-1];
-            float16 h = convert_float16(vload16(0, ( __global const uchar*)(input + srcIndex)));
-            float   i = (( __global const uchar*)(input + srcIndex))[16];
+            float   g = (( INP_MEM uchar*)(input + srcIndex))[-1];
+            float16 h = convert_float16(vload16(0, (INP_MEM uchar*)(input + srcIndex)));
+            float   i = (( INP_MEM uchar*)(input + srcIndex))[16];
 
             float16 Gx =  (float16)    (a, b.s0123, b.s456789ab, b.scde) -     (float16)(b.s123, b.s4567, b.s89abdcef, c) +
                         2.f * (float16)(d, e.s0123, e.s456789ab, e.scde) - 2.f * (float16)(e.s123, e.s4567, e.s89abdcef, f) +
@@ -189,14 +190,11 @@ cl::Program getCompiledKernels()
             an = myselectf16(an, an + 6.2831853f, isless(an, 0));
             vstore16(an, 0, ( __global float*)(grad_dir + dstIndex));
 
-            vstore16(Gx, 0, ( __global float*)(grad_x + dstIndex));
-            vstore16(Gy, 0, ( __global float*)(grad_y + dstIndex));
-
             a = d; b = e; c = f;
             d = g; e = h; f = i;
 
-            float16 bx = vload16(0, ( __global float*)(BSx + dstIndex));
-            float16 by = vload16(0, ( __global float*)(BSy + dstIndex));
+            float16 bx = myselectf16(vload16(0, ( __global float*)(BSx + dstIndex)), Gx, is_first_run);
+            float16 by = myselectf16(vload16(0, ( __global float*)(BSy + dstIndex)), Gy, is_first_run);
 
             float16 D_Sx = Gx - bx;
             bx += D_Sx * as;
@@ -347,10 +345,10 @@ int32_t TimeMeasure::now()
 #define COPYD2H(NAME) cl::copy(queue, b##NAME,  p##NAME.w_ptr(),  p##NAME.end());
 #define COPYH2D(NAME) cl::copy(queue, p##NAME.r_ptr(),  p##NAME.end(), b##NAME);
 
-void openCl::sobel2magic(bool is_minus1, bool is_plus2, const float alpha_s, const float fore_th, cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angle, cv::Mat& mapR)
+//some usefull link about __local memory: https://stackoverflow.com/questions/38345046/local-memory-using-c-wrappers
+void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const float alpha_s, const float fore_th, cv::Mat &gray, cv::Mat& angle, cv::Mat& mapR)
 {
-    VARS(gradx, float);
-    VARS(grady, float);
+
     VARS(angle, float);
     VARS(mapR,  uint8_t);
 
@@ -368,38 +366,27 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, const float alpha_s, con
     static MatProxy<float> pby(aby, gray.rows, gray.cols, 1);
 
     static cl::Buffer bgray (queue, pgray.w_ptr(),    pgray.end(),  true, false);
-    static cl::Buffer bgradx(queue, pgradx.w_ptr(),   pgradx.end(), false, false);
-    static cl::Buffer bgrady(queue, pgrady.w_ptr(),   pgrady.end(), false, false);
     static cl::Buffer bangle(queue, pangle.w_ptr(),   pangle.end(), false, false);
     static cl::Buffer bbx   (queue, pbx.w_ptr(),   pbx.end(),  false, false);
     static cl::Buffer bby   (queue, pby.w_ptr(),   pby.end(),  false, false);
     static cl::Buffer bmapR (queue, pmapR.w_ptr(),  pmapR.end(), false, false);
 
-    static bool once = true;
-    if (once)
-    {
-        once = false;
-        gradx.copyTo(abx);
-        grady.copyTo(aby);
-        COPYH2D(bx);
-        COPYH2D(by);
-    }
-
-
 
     static auto gpus = gpuUsed;
     //std::cout << "Gpus used for sobel: " << gpus << std::endl;
-    std::cout << ((size_t)pangle.w_ptr()) << "   " << ((size_t)pmapR.w_ptr()) << std::endl;
+    //std::cout << ((size_t)pangle.w_ptr()) << "   " << ((size_t)pmapR.w_ptr()) << std::endl;
     try
     {
-        auto kernel = cl::KernelFunctor<int, int, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&> (Kernels, "SobelAndMagicDetector");
+        auto kernel = cl::KernelFunctor<int, int, int, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&> (Kernels, "SobelAndMagicDetector");
         COPYH2D(gray);
         COPYH2D(mapR);
+
+
         while (true)
             try
             {
-                kernel(cl::EnqueueArgs(queue, cl::NDRange(gray.cols / 16, gray.rows / 16), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, alpha_s,
-                       fore_th, bgray, bgradx, bgrady, bangle, bbx, bby, bmapR).wait();
+                kernel(cl::EnqueueArgs(queue, cl::NDRange(gray.cols / 16, gray.rows / 16), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s,
+                       fore_th, bgray, bangle, bbx, bby, bmapR).wait();
                 break;
             }
             catch (cl::Error& err)
@@ -411,22 +398,12 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, const float alpha_s, con
                 }
                 throw err;
             }
-        COPYD2H(gradx);
-        COPYD2H(grady);
         COPYD2H(angle);
-        COPYD2H(bx);
-        COPYD2H(by);
         if (is_plus2 || is_minus1)
             COPYD2H(mapR);
     }
     CATCHCL
-
-    pgradx.updateMatrixIfNeeded();
-    pgrady.updateMatrixIfNeeded();
     pangle.updateMatrixIfNeeded();
-
-    pbx.updateMatrixIfNeeded();
-    pby.updateMatrixIfNeeded();
 
     if (is_plus2 || is_minus1)
         pmapR.updateMatrixIfNeeded();

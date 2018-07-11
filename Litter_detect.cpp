@@ -148,14 +148,7 @@ static void execute(const char* videopath, std::ofstream& results)
 
         //ok, original sobel + magic takes 550 - 650 ms
 
-        if (i == 0)
-        {
-            cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
-            cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
-            continue;
-        }
-
-        cl->sobel2magic(i % framemod2 == 0, i > frameinit && i % framemod2 == 0, alpha_S, fore_th, gray, grad_x, grad_y, angles.getStorage(), abandoned_map);
+        cl->sobel2magic(i % framemod2 == 0, i > frameinit && i % framemod2 == 0, i == 0, alpha_S, fore_th, gray, angles.getStorage(), abandoned_map);
 
         if (i > frameinit && i % framemod2 == 0)
         {
