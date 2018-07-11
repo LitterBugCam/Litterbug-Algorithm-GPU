@@ -344,41 +344,18 @@ int32_t TimeMeasure::now()
     return  std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
-static int align16(int v)
-{
-    if (v % 16 == 0)
-        return v;
-    return (1 + v / 16) * 16;
-}
 
-#define VARS(NAME,TYPE) static cv::Mat a##NAME; static MatProxy<TYPE> p##NAME(1); p##NAME.assign((useOrigin) ? NAME : a##NAME, src.rows, src.cols)
-#define COPY(NAME) a##NAME(roi).copyTo(NAME)
+#define VARS(NAME,TYPE) static MatProxy<TYPE> p##NAME(1); p##NAME.assign(NAME, gray.rows, gray.cols)
 #define COPYB(NAME) cl::copy(b##NAME,  p##NAME.w_ptr(),  p##NAME.end());
 
 void openCl::sobel2magic(bool is_minus1, bool is_plus2, const float alpha_s, const float fore_th, cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angle, cv::Mat& mapR)
 {
-    const auto aw = align16(gray.cols);
-    const auto ah = align16(gray.rows);
-
-    const auto dw = aw - gray.cols;
-    const auto dh = ah - gray.rows;
-    const bool useOrigin = (dw == 0) && (dh == 0);
-
-    static cv::Mat aligned(ah, aw, gray.depth());
-    cv::Mat& src = (useOrigin) ? gray : aligned;
-
     VARS(gradx, float);
     VARS(grady, float);
     VARS(angle, float);
     VARS(mapR,  uint8_t);
 
-    if (!useOrigin)
-    {
-        cv::copyMakeBorder(gray, aligned, 0, dh, 0, dw, cv::BORDER_REPLICATE);
-        cv::copyMakeBorder(mapR, amapR, 0, dh, 0, dw,   cv::BORDER_CONSTANT, cv::Scalar(0));
-    }
-
-    static cv::Mat gray_buf(src.rows + 2, src.cols + 32, src.depth());
+    static cv::Mat gray_buf(gray.rows + 2, gray.cols + 32, gray.depth());
     //3ms on PI
     cv::copyMakeBorder(gray, gray_buf, 1, 1, 16, 16, cv::BORDER_REPLICATE);
 
@@ -390,16 +367,16 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, const float alpha_s, con
     static cv::Mat abx;
     static cv::Mat aby;
     static MatProxy<float> pbx(1);
-    pbx.assign(abx, src.rows, src.cols);
+    pbx.assign(abx, gray.rows, gray.cols);
     static MatProxy<float> pby(1);
-    pby.assign(aby, src.rows, src.cols);
+    pby.assign(aby, gray.rows, gray.cols);
 
     static bool once = true;
     if (once)
     {
         once = false;
-        cv::copyMakeBorder(gradx, abx, 0, dh, 0, dw, cv::BORDER_CONSTANT, cv::Scalar(0));
-        cv::copyMakeBorder(grady, aby, 0, dh, 0, dw, cv::BORDER_CONSTANT, cv::Scalar(0));
+        gradx.copyTo(abx);
+        grady.copyTo(aby);
     }
 
 
@@ -456,20 +433,6 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, const float alpha_s, con
     if (is_plus2 || is_minus1)
         pmapR.updateMatrixIfNeeded();
 
-    if (!useOrigin)
-    {
-        cv::Rect roi;
-        roi.x = 0;
-        roi.y = 0;
-        roi.width  = gray.cols;
-        roi.height = gray.rows;
-
-        COPY(gradx);
-        COPY(grady);
-        COPY(angle);
-        if (is_plus2 || is_minus1)
-            COPY(mapR);
-    }
 }
 #undef VARS
 #undef COPY

@@ -62,6 +62,13 @@ const static std::map<std::string, std::function<void(const std::string& src)>> 
 
 std::shared_ptr<openCl> cl(nullptr);
 
+static int align16(int v)
+{
+    if (v % 16 == 0)
+        return v;
+    return (1 + v / 16) * 16;
+}
+
 static void execute(const char* videopath, std::ofstream& results)
 {
     std::cout << "Video file: " << videopath << std::endl;
@@ -70,7 +77,6 @@ static void execute(const char* videopath, std::ofstream& results)
     const auto fps         = std::max(1l, static_cast<long>(capture.get(CV_CAP_PROP_FPS)));
     capture.set(CV_CAP_PROP_BUFFERSIZE, 1);
 
-    cv::Mat gray;
 #ifndef NO_GUI
     cv::Mat image; //current opencl on pi do not handle UMat for images
 #else
@@ -91,7 +97,12 @@ static void execute(const char* videopath, std::ofstream& results)
         resize(image, image, cv::Size(image.cols * resize_scale, image.rows * resize_scale));
 
 
+    const auto aw = align16(image.cols);
+    const auto ah = align16(image.rows);
 
+    const auto dw = aw - image.cols;
+    const auto dh = ah - image.rows;
+    const bool useOrigin = (dw == 0) && (dh == 0);
 
 
     const static float alpha_init = 0.01;
@@ -108,7 +119,6 @@ static void execute(const char* videopath, std::ofstream& results)
     ZeroedArray<uint8_t> object_map(0);
     ZeroedArray<float> angles(0);
     cv::Mat not_used;
-
 #ifndef NO_FPS
     float meanfps = 0;
 #endif
@@ -129,13 +139,16 @@ static void execute(const char* videopath, std::ofstream& results)
         if (resize_scale != 1)
             cv::resize(image, image, cv::Size(image.cols * resize_scale, image.rows * resize_scale));
 
-        cv::cvtColor(image, gray, CV_BGR2GRAY);
-        cv::blur(gray, gray, cv::Size(3, 3));
-
-
-
+        cv::cvtColor(image, not_used, CV_BGR2GRAY);
+        cv::blur(not_used, not_used, cv::Size(3, 3));
         if (low_light)
-            gray = gray.mul(1.5f);
+            not_used = not_used.mul(1.5f);
+
+        //making aligned to 16 width & height
+        static cv::Mat aligned(ah, aw, not_used.depth());
+        cv::Mat& gray = (useOrigin) ? not_used : aligned;
+        if (!useOrigin)
+            cv::copyMakeBorder(not_used, aligned, 0, dh, 0, dw, cv::BORDER_CONSTANT, cv::Scalar(0));
 
         assert(abandoned_map.isContinuous());
         auto plain_map_ptr = abandoned_map.ptr<uchar>();
@@ -149,50 +162,49 @@ static void execute(const char* videopath, std::ofstream& results)
             {
                 cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
                 cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
-                cl->atan2(grad_x, grad_y, angles.getStorage());
+                continue;
             }
-            else
-                cl->sobel2magic(i % framemod2 == 0, i > frameinit && i % framemod2 == 0, alpha_S, fore_th, gray, grad_x, grad_y, angles.getStorage(), abandoned_map);
+
+            cl->sobel2magic(i % framemod2 == 0, i > frameinit && i % framemod2 == 0, alpha_S, fore_th, gray, grad_x, grad_y, angles.getStorage(), abandoned_map);
+
+            if (i > frameinit && i % framemod2 == 0)
+            {
+
+                for (fullbits_int_t j = 1; j < image.rows - 1; ++j)
+                {
+                    plain_map_ptr += image.cols;
+                    for (fullbits_int_t k = 1; k < image.cols - 1; ++k)
+                    {
+                        auto point = plain_map_ptr + k;
+
+                        //hmm, this code can be removed for test image - same result
+                        if (*point > aotime2 && *point < aotime)
+                            for (fullbits_int_t c0 = -1; c0 <= 1; ++c0)
+                            {
+                                if (c0 && *(point + c0) > aotime) //excluding c0 = 0 which is meself
+                                {
+                                    *point = aotime;
+                                    break;
+                                }
+
+                                if (*(point + image.cols + c0) > aotime )
+                                {
+                                    *point = aotime;
+                                    break;
+                                }
+
+                                if (*(point - image.cols + c0) > aotime )
+                                {
+                                    *point = aotime;
+                                    break;
+                                }
+                            }
+                    }
+                }
+            }
 #ifndef NO_FPS
         }
 #endif
-
-        if (i > frameinit && i % framemod2 == 0)
-        {
-
-            for (fullbits_int_t j = 1; j < image.rows - 1; ++j)
-            {
-                plain_map_ptr += image.cols;
-                for (fullbits_int_t k = 1; k < image.cols - 1; ++k)
-                {
-                    auto point = plain_map_ptr + k;
-
-                    //hmm, this code can be removed for test image - same result
-                    if (*point > aotime2 && *point < aotime)
-                        for (fullbits_int_t c0 = -1; c0 <= 1; ++c0)
-                        {
-                            if (c0 && *(point + c0) > aotime) //excluding c0 = 0 which is meself
-                            {
-                                *point = aotime;
-                                break;
-                            }
-
-                            if (*(point + image.cols + c0) > aotime )
-                            {
-                                *point = aotime;
-                                break;
-                            }
-
-                            if (*(point - image.cols + c0) > aotime )
-                            {
-                                *point = aotime;
-                                break;
-                            }
-                        }
-                }
-            }
-        }
-
 
         cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
         abandoned_objects.populateObjects(frame, i);
