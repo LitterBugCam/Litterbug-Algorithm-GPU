@@ -186,7 +186,7 @@ cl::Program getCompiledKernels()
                         (float16)(g, h.s0123, h.s456789ab, h.scde) - 2.f * h - (float16)(h.s123, h.s4567, h.s89abdcef, i);
 
             float16 an = myatan2f16(Gy, Gx);
-            an = myselectf16(an, an + 6.2831853f, an < 0);
+            an = myselectf16(an, an + 6.2831853f, isless(an, 0));
             vstore16(an, 0, ( __global float*)(grad_dir + dstIndex));
 
             vstore16(Gx, 0, ( __global float*)(grad_x + dstIndex));

@@ -176,7 +176,6 @@ static void execute(const char* videopath, std::ofstream& results)
                                 *point = aotime;
                                 break;
                             }
-
                         }
                 }
             }
