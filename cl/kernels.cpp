@@ -202,52 +202,42 @@ cl::Program getCompiledKernels()
         }
         )CLC",
         R"CLC(
-        __kernel void SobelDetector( __global const uchar* restrict input,  __global float* restrict grad_x,  __global float* restrict grad_y,  __global float* restrict grad_dir)
+        __kernel void SobelDetector( __global const uchar16* restrict input,  __global float16* restrict grad_x,  __global float16* restrict grad_y,  __global float16* restrict grad_dir)
         {
-            uint x      = get_global_id(0) + 1;
-            uint y      = get_global_id(1) + 1;
-            uint width  = get_global_size(0) + 2;
+            uint dstXStride = get_global_size(0); //original width / 16
+            uint dstIndex   = get_global_id(1) * dstXStride + get_global_id(0);
+            uint srcXStride = dstXStride + 2;
+            uint srcIndex   = get_global_id(1) * srcXStride + get_global_id(0) + 1;
 
 
-            uint out_index = (x - 1) + (y - 1) * (width - 2);
+            int   a = (( __global const uchar*)(input + srcIndex))[-1];
+            int16 b = convert_int16(input[srcIndex]);
+            int   c = (( __global const uchar*)(input + srcIndex))[16];
+            srcIndex += srcXStride;
 
-            // Given that we know the (x,y) coordinates of the pixel we're
-            // looking at, its natural to use (x,y) to look at its
-            // neighbouring pixels
-            // Convince yourself that the indexing operation below is
-            // doing exactly that
-            // the variables i00 through to i22 seek to identify the pixels
-            // following the naming convention in graphics programming e.g.
-            // OpenGL where i00 refers
-            // to the top-left-hand corner and iterates through to the bottom
-            // right-hand corner
+            int   d = (( __global const uchar*)(input + srcIndex))[-1];
+            int16 e = convert_int16(input[srcIndex]);
+            int   f = (( __global const uchar*)(input + srcIndex))[16];
+            srcIndex += srcXStride;
 
-            float i00 = input[(x - 1) + (y - 1) * width];
-            float i10 = input[x + (y - 1) * width];
-            float i20 = input[(x + 1) + (y - 1) * width];
-            float i01 = input[(x - 1) + y * width];
-            float i11 = input[x + y * width];
-            float i21 = input[(x + 1) + y * width];
-            float i02 = input[(x - 1) + (y + 1) * width];
-            float i12 = input[x + (y + 1) * width];
-            float i22 = input[(x + 1) + (y + 1) * width];
+            int   g = (( __global const uchar*)(input + srcIndex))[-1];
+            int16 h = convert_int16(input[srcIndex]);
+            int   i = (( __global const uchar*)(input + srcIndex))[16];
 
-                // To understand why the masks are applied this way, look
-                // at the mask for Gy and Gx which are respectively equal
-                // to the matrices:
-                // { {-1, 0, 1}, { {-1,-2,-1},
-                // {-2, 0, 2}, { 0, 0, 0},
-                // {-1, 0, 1}} { 1, 2, 1}}
+            int16 Gx =  (int16)    (a, b.s0123, b.s456789ab, b.scde) -     (int16)(b.s123, b.s4567, b.s89abdcef, c) +
+                        2 * (int16)(d, e.s0123, e.s456789ab, e.scde) - 2 * (int16)(e.s123, e.s4567, e.s89abdcef, f) +
+                        (int16)    (g, h.s0123, h.s456789ab, h.scde) -     (int16)(h.s123, h.s4567, h.s89abdcef, i);
 
-            float Gx = i00 + 2.f * i10 + i20 - i02 - 2.f * i12 -i22;
-            float Gy = i00 - i20 + 2.f*i01 - 2.f*i21 + i02 - i22;
+            int16 Gy =  (int16)(a, b.s0123, b.s456789ab, b.scde) + 2 * b + (int16)(b.s123, b.s4567, b.s89abdcef, c) -
+                        (int16)(g, h.s0123, h.s456789ab, h.scde) - 2 * h - (int16)(h.s123, h.s4567, h.s89abdcef, i);
 
-            grad_x[out_index] = Gx;
-            grad_y[out_index] = Gy;
-            float a = myatan2f1(Gy, Gx);
-            a = (a, a + 6.2831853f, a < 0);
-            grad_dir[out_index] = a;
-
+            float16 gx = convert_float16(Gx);
+            float16 gy = convert_float16(Gy);
+            float16 an = myatan2f16(gy, gx);
+            an = myselectf16(an, an + 6.2831853f, an < 0);
+            grad_x[dstIndex]   = gx;
+            grad_y[dstIndex]   = gy;
+            grad_dir[dstIndex] = an;
        }
       )CLC",
     };
@@ -410,8 +400,8 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
 
 void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angle)
 {
-    static cv::Mat gray_buf(gray.rows + 2, gray.cols + 2, gray.depth());
-    copyMakeBorder(gray, gray_buf, 1, 1, 1, 1, cv::BORDER_REPLICATE);
+    static cv::Mat gray_buf(gray.rows + 2, gray.cols + 32, gray.depth());
+    cv::copyMakeBorder(gray, gray_buf, 1, 1, 16, 16, cv::BORDER_REPLICATE);
 
     static MatProxy<uchar> pgray(1);//don't align, will run "rectangular" kernel
     pgray.assign(gray_buf, 0);
@@ -438,7 +428,7 @@ void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angl
         while (true)
             try
             {
-                kernel(cl::EnqueueArgs(queue, cl::NDRange(gray.cols, gray.rows), cl::NDRange(gpus)),  bgray, bgradx, bgrady, bangle).wait();
+                kernel(cl::EnqueueArgs(queue, cl::NDRange(gray.cols / 16, gray.rows), cl::NDRange(gpus)),  bgray, bgradx, bgrady, bangle).wait();
                 break;
             }
             catch (cl::Error& err)
