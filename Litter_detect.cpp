@@ -144,9 +144,9 @@ static void execute(const char* videopath, std::ofstream& results)
 #endif
 
         //for now we can use custom kernel when image size is multiply of 16
-        if (is16)
-            cl->sobel2(gray, grad_x, grad_y, angles.getStorage());
-        else
+        //        if (is16)
+        //            cl->sobel2(gray, grad_x, grad_y, angles.getStorage());
+        //        else
         {
             cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
             cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
@@ -154,7 +154,7 @@ static void execute(const char* videopath, std::ofstream& results)
         }
 
 #ifndef NO_FPS
-        std::cout << "Magic is done in (ms): " << now() - start << std::endl;
+        std::cout << "Sobel is done in (ms): " << now() - start << std::endl;
 #endif
         if (i == 0)
         {

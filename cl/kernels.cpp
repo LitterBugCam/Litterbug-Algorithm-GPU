@@ -201,6 +201,7 @@ cl::Program getCompiledKernels()
             }
         }
         )CLC",
+        //https://software.intel.com/en-us/videos/optimizing-simple-opencl-kernels-sobel-kernel-optimization
         R"CLC(
         __kernel void SobelDetector( __global const uchar16* restrict input,  __global float16* restrict grad_x,  __global float16* restrict grad_y,  __global float16* restrict grad_dir)
         {
