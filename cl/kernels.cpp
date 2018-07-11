@@ -144,7 +144,7 @@ cl::Program getCompiledKernels()
         //https://software.intel.com/en-us/videos/optimizing-simple-opencl-kernels-sobel-kernel-optimization
 
         R"CLC(
-        __kernel void SobelAndMagicDetector(const int is_deeper_magic, const float alpha_s, const float fore_th, __global const uchar16* restrict input,  __global float16* restrict grad_x,
+        __kernel void SobelAndMagicDetector(const int is_minus1, const int is_plus2, const float alpha_s, const float fore_th, __global const uchar16* restrict input,  __global float16* restrict grad_x,
                                              __global  float16* restrict grad_y,  __global float16* restrict grad_dir,
                                               __global float16* restrict BSx,     __global float16* restrict BSy, __global uchar16* restrict mapRes
                                            )
@@ -157,7 +157,6 @@ cl::Program getCompiledKernels()
             const float16 as = alpha_s;
             const float16 fth = fore_th;
             const float16 v19 = 19;
-            const int16 mult = is_deeper_magic; //all 1's or all 0's
             const int16 zeros = 0;
             const int16 ones  = 1;
             const int16 twos  = 2;
@@ -209,12 +208,12 @@ cl::Program getCompiledKernels()
 
 
             int16 mr           = convert_int16(vload16(0, ( __global uchar*)(mapRes + dstIndex)));
-            mr -= mult;
+            mr -= is_minus1;
 
             int16 c1 = isgreater(fabs(D_Sx), fth) && isgreater(fabs(Gx), v19);
             int16 c2 = isgreater(fabs(D_Sy), fth) && isgreater(fabs(Gy), v19);
 
-            mr += mult * myselecti16(zeros, ones, c2 || c1) * twos;
+            mr += is_plus2 * myselecti16(zeros, ones, c2 || c1) * twos;
             c1 = mr < zeros;
             c2 = myselecti16(mr, zeros, c1);//overflow protection
             c1 = c2 > twos5;
@@ -356,7 +355,7 @@ static int align16(int v)
 #define COPY(NAME) a##NAME(roi).copyTo(NAME)
 #define COPYB(NAME) cl::copy(b##NAME,  p##NAME.w_ptr(),  p##NAME.end());
 
-void openCl::sobel2magic(bool is_deeper_magic, const float alpha_s, const float fore_th, cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angle, cv::Mat& mapR)
+void openCl::sobel2magic(bool is_minus1, bool is_plus2, const float alpha_s, const float fore_th, cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angle, cv::Mat& mapR)
 {
     const auto aw = align16(gray.cols);
     const auto ah = align16(gray.rows);
@@ -411,7 +410,7 @@ void openCl::sobel2magic(bool is_deeper_magic, const float alpha_s, const float 
 
     try
     {
-        auto kernel = cl::KernelFunctor<int, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&> (Kernels, "SobelAndMagicDetector");
+        auto kernel = cl::KernelFunctor<int, int, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&> (Kernels, "SobelAndMagicDetector");
         cl::Buffer bgray (queue,  pgray.r_ptr(),    pgray.end(),  true,  true);
         cl::Buffer bgradx( queue, pgradx.w_ptr(),   pgradx.end(), false, true);
         cl::Buffer bgrady( queue, pgrady.w_ptr(),   pgrady.end(), false, true);
@@ -424,7 +423,7 @@ void openCl::sobel2magic(bool is_deeper_magic, const float alpha_s, const float 
         while (true)
             try
             {
-                kernel(cl::EnqueueArgs(queue, cl::NDRange(gray.cols / 16, gray.rows / 16), cl::NDRange(gpus)), (is_deeper_magic) ? 1 : 0, alpha_s,
+                kernel(cl::EnqueueArgs(queue, cl::NDRange(gray.cols / 16, gray.rows / 16), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, alpha_s,
                        fore_th, bgray, bgradx, bgrady, bangle, bbx, bby, bmapR).wait();
                 break;
             }
@@ -442,7 +441,8 @@ void openCl::sobel2magic(bool is_deeper_magic, const float alpha_s, const float 
         COPYB(angle);
         COPYB(bx);
         COPYB(by);
-        COPYB(mapR);
+        if (is_plus2 || is_minus1)
+            COPYB(mapR);
     }
     CATCHCL
 
@@ -465,7 +465,8 @@ void openCl::sobel2magic(bool is_deeper_magic, const float alpha_s, const float 
         COPY(gradx);
         COPY(grady);
         COPY(angle);
-        COPY(mapR);
+        if (is_plus2 || is_minus1)
+            COPY(mapR);
     }
 }
 #undef VARS

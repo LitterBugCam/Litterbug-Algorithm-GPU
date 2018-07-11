@@ -137,7 +137,6 @@ static void execute(const char* videopath, std::ofstream& results)
         if (low_light)
             gray = gray.mul(1.5f);
 
-        const bool is_deeper_magic = (i % framemod2 == 0);
         assert(abandoned_map.isContinuous());
         auto plain_map_ptr = abandoned_map.ptr<uchar>();
         //ok, original sobel + magic takes 550 - 650 ms
@@ -153,12 +152,12 @@ static void execute(const char* videopath, std::ofstream& results)
                 cl->atan2(grad_x, grad_y, angles.getStorage());
             }
             else
-                cl->sobel2magic(is_deeper_magic, alpha_S, fore_th, gray, grad_x, grad_y, angles.getStorage(), abandoned_map);
+                cl->sobel2magic(i % framemod2 == 0, i > frameinit && i % framemod2 == 0, alpha_S, fore_th, gray, grad_x, grad_y, angles.getStorage(), abandoned_map);
 #ifndef NO_FPS
         }
 #endif
 
-        if (i > frameinit && is_deeper_magic)
+        if (i > frameinit && i % framemod2 == 0)
         {
 
             for (fullbits_int_t j = 1; j < image.rows - 1; ++j)
