@@ -78,10 +78,12 @@ cl::Program getCompiledKernels()
                                                t0 = t0 * t4 + 0.999995630f;
                                                t3 = t0 * t3;
 
-                                               t3 = (fabs(y) > fabs(x)) ? 1.570796327f - t3 : t3;
-                                               t3 = (x < 0) ?  3.141592654f - t3 : t3;
-                                               t3 = (y < 0) ? -t3 : t3;
-
+                                               //t3 = (fabs(y) > fabs(x)) ? 1.570796327f - t3 : t3;
+                                               t3 = myselectf16(t3, 1.570796327f - t3, isgreater(fabs(y), fabs(x)));
+                                               //t3 = (x < 0) ?  3.141592654f - t3 : t3;
+                                               t3 = myselectf16(t3, 3.141592654f - t3, isless(x, 0));
+                                               //t3 = (y < 0) ? -t3 : t3;
+                                               t3 = myselectf16(t3, - t3, isless(y, 0));
                                                return t3;
                                              }
 
