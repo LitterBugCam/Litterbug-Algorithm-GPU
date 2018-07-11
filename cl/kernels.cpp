@@ -211,18 +211,19 @@ cl::Program getCompiledKernels()
             uint srcIndex   = get_global_id(1) * srcXStride + get_global_id(0) + 1;
 
 
+
             float   a = (( __global const uchar*)(input + srcIndex))[-1];
-            float16 b = convert_float16(input[srcIndex]);
+            float16 b = convert_float16(vload16(0, ( __global const uchar*)(input + srcIndex)));
             float   c = (( __global const uchar*)(input + srcIndex))[16];
             srcIndex += srcXStride;
 
             float   d = (( __global const uchar*)(input + srcIndex))[-1];
-            float16 e = convert_float16(input[srcIndex]);
+            float16 e = convert_float16(vload16(0, ( __global const uchar*)(input + srcIndex)));
             float   f = (( __global const uchar*)(input + srcIndex))[16];
             srcIndex += srcXStride;
 
             float   g = (( __global const uchar*)(input + srcIndex))[-1];
-            float16 h = convert_float16(input[srcIndex]);
+            float16 h = convert_float16(vload16(0, ( __global const uchar*)(input + srcIndex)));
             float   i = (( __global const uchar*)(input + srcIndex))[16];
 
             float16 Gx =  (float16)    (a, b.s0123, b.s456789ab, b.scde) -     (float16)(b.s123, b.s4567, b.s89abdcef, c) +
@@ -234,9 +235,9 @@ cl::Program getCompiledKernels()
 
             float16 an = myatan2f16(Gy, Gx);
             an = myselectf16(an, an + 6.2831853f, an < 0);
-            grad_x[dstIndex]   = Gx;
-            grad_y[dstIndex]   = Gy;
-            grad_dir[dstIndex] = an;
+            vstore16(Gx, 0, ( __global float*)(grad_x + dstIndex));
+            vstore16(Gy, 0, ( __global float*)(grad_y + dstIndex));
+            vstore16(an, 0, ( __global float*)(grad_dir + dstIndex));
        }
       )CLC",
     };
@@ -353,7 +354,7 @@ void openCl::atan2(cv::Mat &gradx, cv::Mat &grady, cv::Mat &angle)
 
 }
 
-int32_t now()
+int32_t TimeMeasure::now()
 {
     return  std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
@@ -371,9 +372,6 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
     static MatProxy<uint8_t, int> pres(Align);
     pres.assign(mapR, 0);
     //std::cout << "Starting magic...\n";
-#ifndef NO_FPS
-    auto start = now();
-#endif
     try
     {
         auto kernel = cl::KernelFunctor<const int, float, float, int, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&>(Kernels, "gradMagic");
@@ -400,8 +398,10 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
 void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angle)
 {
     static cv::Mat gray_buf(gray.rows + 2, gray.cols + 32, gray.depth());
-    cv::copyMakeBorder(gray, gray_buf, 1, 1, 16, 16, cv::BORDER_REPLICATE);
-
+    {
+        TimeMeasure t("copyMakeBorder");
+        cv::copyMakeBorder(gray, gray_buf, 1, 1, 16, 16, cv::BORDER_REPLICATE);
+    }
     static MatProxy<uchar> pgray(1);//don't align, will run "rectangular" kernel
     pgray.assign(gray_buf, 0);
 

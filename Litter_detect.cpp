@@ -61,7 +61,6 @@ const static std::map<std::string, std::function<void(const std::string& src)>> 
 #undef DECLARE_PARAM
 
 std::shared_ptr<openCl> cl(nullptr);
-extern int32_t now();
 
 static void execute(const char* videopath, std::ofstream& results)
 {
@@ -140,22 +139,23 @@ static void execute(const char* videopath, std::ofstream& results)
             gray = gray.mul(1.5f);
 
 #ifndef NO_FPS
-        auto start = now();
+        {
+            TimeMeasure tm("Sobel");
 #endif
 
-        //for now we can use custom kernel when image size is multiply of 16
-        if (is16)
-            cl->sobel2(gray, grad_x, grad_y, angles.getStorage());
-        else
-        {
-            //this is 214ms on PI
-            cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
-            cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
-            cl->atan2(grad_x, grad_y, angles.getStorage());
-        }
+            //for now we can use custom kernel when image size is multiply of 16
+            if (is16)
+                cl->sobel2(gray, grad_x, grad_y, angles.getStorage());
+            else
+            {
+                //this is 214ms on PI
+                cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
+                cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
+                cl->atan2(grad_x, grad_y, angles.getStorage());
+            }
 
 #ifndef NO_FPS
-        std::cout << "Sobel is done in (ms): " << now() - start << std::endl;
+        }
 #endif
         if (i == 0)
         {
