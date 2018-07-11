@@ -117,8 +117,7 @@ static void execute(const char* videopath, std::ofstream& results)
     float meanfps = 0;
 #endif
 
-    cv::Mat abandoned_map = cv::Mat(image.rows, image.cols, CV_8UC1, cv::Scalar(0));
-    //const bool is16 = (image.cols % 16 == 0);
+    cv::Mat abandoned_map  = cv::Mat(ah, aw, CV_8UC1, cv::Scalar(0));
 
     for (fullbits_int_t i = 0; !image.empty(); ++i, (capture >> image))
     {
@@ -131,7 +130,7 @@ static void execute(const char* videopath, std::ofstream& results)
             continue;
 
         if (resize_scale != 1)
-            cv::resize(image, image, cv::Size(image.cols * resize_scale, image.rows * resize_scale));
+            cv::resize(image, image, cv::Size(aw, ah));
 
         cv::cvtColor(image, not_used, CV_BGR2GRAY);
         cv::blur(not_used, not_used, cv::Size(3, 3));
@@ -145,9 +144,9 @@ static void execute(const char* videopath, std::ofstream& results)
             cv::copyMakeBorder(not_used, aligned, 0, dh, 0, dw, cv::BORDER_CONSTANT, cv::Scalar(0));
 
         assert(abandoned_map.isContinuous());
-        auto plain_map_ptr = abandoned_map.ptr<uchar>();
-        //ok, original sobel + magic takes 550 - 650 ms
+        auto plain_map_ptr  = abandoned_map.ptr<uchar>();
 
+        //ok, original sobel + magic takes 550 - 650 ms
 
         if (i == 0)
         {
@@ -160,28 +159,26 @@ static void execute(const char* videopath, std::ofstream& results)
 
         if (i > frameinit && i % framemod2 == 0)
         {
-            for (fullbits_int_t j = 1; j < image.rows - 1; ++j)
+            for (fullbits_int_t j = 1; j < abandoned_map.rows - 1; ++j)
             {
-                plain_map_ptr += image.cols;
-                for (fullbits_int_t k = 1; k < image.cols - 1; ++k)
-                {
-                    auto point = plain_map_ptr + k;
+                plain_map_ptr  += abandoned_map.cols;
 
+                for (fullbits_int_t k = 1; k < abandoned_map.cols - 1; ++k)
+                {
+                    auto point  = plain_map_ptr + k;
                     //hmm, this code can be removed for test image - same result
                     if (*point > aotime2 && *point < aotime)
                         for (fullbits_int_t c0 = -1; c0 <= 1; ++c0)
                         {
-                            if ((c0 && *(point + c0) > aotime) || *(point + image.cols + c0) > aotime || *(point - image.cols + c0) > aotime ) //excluding c0 = 0 which is meself
+                            if ((c0 && *(point + c0) > aotime) || *(point + abandoned_map.cols + c0) > aotime || *(point - abandoned_map.cols + c0) > aotime ) //excluding c0 = 0 which is meself
                             {
                                 *point = aotime;
                                 break;
                             }
-
                         }
                 }
             }
         }
-
 
         cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
         cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
