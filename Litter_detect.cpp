@@ -160,8 +160,6 @@ static void execute(const char* videopath, std::ofstream& results)
 
         if (i > frameinit && i % framemod2 == 0)
         {
-
-            TimeMeasure tm("2nd Loop");
             for (fullbits_int_t j = 1; j < image.rows - 1; ++j)
             {
                 plain_map_ptr += image.cols;
@@ -195,13 +193,12 @@ static void execute(const char* videopath, std::ofstream& results)
             }
         }
 
-        {
-            TimeMeasure tm("Th x2 + Canny");
-            cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
-            cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
-            cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
 
-        }
+        cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
+        cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
+        cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
+
+
         abandoned_objects.populateObjects(frame, i);
 
 #ifndef NO_GUI

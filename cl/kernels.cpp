@@ -205,6 +205,7 @@ cl::Program getCompiledKernels()
             float16 D_Sy = Gy - by;
             by += D_Sy * as;
             vstore16(by, 0, ( __global float*)(BSy + dstIndex));
+
             int16 mr           = convert_int16(vload16(0, ( __global uchar*)(mapRes + dstIndex)));
             mr -= is_minus1;
             int16 c1 = isgreater(fabs(D_Sx), fth) && isgreater(fabs(Gx), v19);
