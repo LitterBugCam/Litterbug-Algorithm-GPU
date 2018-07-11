@@ -203,7 +203,7 @@ cl::Program getCompiledKernels()
         )CLC",
         //https://software.intel.com/en-us/videos/optimizing-simple-opencl-kernels-sobel-kernel-optimization
         R"CLC(
-        __kernel void SobelDetector( __global const uchar16* restrict input,  __global float16* restrict grad_x,  __global float16* restrict grad_y,  __global float16* restrict grad_dir)
+        __kernel void Sobel( __global const int16* restrict input,  __global float16* restrict grad_x,  __global float16* restrict grad_y,  __global float16* restrict grad_dir)
         {
             uint dstXStride = get_global_size(0); //original width / 16
             uint dstIndex   = 16 * get_global_id(1) * dstXStride + get_global_id(0);
@@ -237,14 +237,20 @@ cl::Program getCompiledKernels()
 
             float16 an = myatan2f16(Gy, Gx);
             an = myselectf16(an, an + 6.2831853f, an < 0);
+            vstore16(an, 0, ( __global float*)(grad_dir + dstIndex));
+
             vstore16(Gx, 0, ( __global float*)(grad_x + dstIndex));
             vstore16(Gy, 0, ( __global float*)(grad_y + dstIndex));
-            vstore16(an, 0, ( __global float*)(grad_dir + dstIndex));
+
             a = d; b = e; c = f;
             d = g; e = h; f = i;
             dstIndex += dstXStride;
             }
-       }
+       };
+       __kernel void SobelDetector( __global const int16* restrict input,  __global float16* restrict grad_x,  __global float16* restrict grad_y,  __global float16* restrict grad_dir)
+        {
+            Sobel(input, grad_x, grad_y, grad_dir);
+        }
       )CLC",
     };
 
@@ -422,7 +428,7 @@ void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angl
     //3ms on PI
     cv::copyMakeBorder(gray, gray_buf, 1, 1, 16, 16, cv::BORDER_REPLICATE);
 
-    static MatProxy<uchar> pgray(1);//don't align, will run "rectangular" kernel
+    static MatProxy<uchar, int> pgray(1);//don't align, will run "rectangular" kernel
     pgray.assign(gray_buf, 0);
 
     static cv::Mat agradx;
@@ -438,7 +444,7 @@ void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angl
     pangle.assign((useOrigin) ? angle : aangle, src.rows, src.cols);
 
     static auto gpus = gpuUsed;
-    std::cout << "Gpus used for sobel: " << gpus << std::endl;
+    //std::cout << "Gpus used for sobel: " << gpus << std::endl;
 
     try
     {
