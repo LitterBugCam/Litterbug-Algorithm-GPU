@@ -211,33 +211,31 @@ cl::Program getCompiledKernels()
             uint srcIndex   = get_global_id(1) * srcXStride + get_global_id(0) + 1;
 
 
-            int   a = (( __global const uchar*)(input + srcIndex))[-1];
-            int16 b = convert_int16(input[srcIndex]);
-            int   c = (( __global const uchar*)(input + srcIndex))[16];
+            float   a = (( __global const uchar*)(input + srcIndex))[-1];
+            float16 b = convert_float16(input[srcIndex]);
+            float   c = (( __global const uchar*)(input + srcIndex))[16];
             srcIndex += srcXStride;
 
-            int   d = (( __global const uchar*)(input + srcIndex))[-1];
-            int16 e = convert_int16(input[srcIndex]);
-            int   f = (( __global const uchar*)(input + srcIndex))[16];
+            float   d = (( __global const uchar*)(input + srcIndex))[-1];
+            float16 e = convert_float16(input[srcIndex]);
+            float   f = (( __global const uchar*)(input + srcIndex))[16];
             srcIndex += srcXStride;
 
-            int   g = (( __global const uchar*)(input + srcIndex))[-1];
-            int16 h = convert_int16(input[srcIndex]);
-            int   i = (( __global const uchar*)(input + srcIndex))[16];
+            float   g = (( __global const uchar*)(input + srcIndex))[-1];
+            float16 h = convert_float16(input[srcIndex]);
+            float   i = (( __global const uchar*)(input + srcIndex))[16];
 
-            int16 Gx =  (int16)    (a, b.s0123, b.s456789ab, b.scde) -     (int16)(b.s123, b.s4567, b.s89abdcef, c) +
-                        2 * (int16)(d, e.s0123, e.s456789ab, e.scde) - 2 * (int16)(e.s123, e.s4567, e.s89abdcef, f) +
-                        (int16)    (g, h.s0123, h.s456789ab, h.scde) -     (int16)(h.s123, h.s4567, h.s89abdcef, i);
+            float16 Gx =  (float16)    (a, b.s0123, b.s456789ab, b.scde) -     (float16)(b.s123, b.s4567, b.s89abdcef, c) +
+                        2 * (float16)(d, e.s0123, e.s456789ab, e.scde) - 2 * (float16)(e.s123, e.s4567, e.s89abdcef, f) +
+                        (float16)    (g, h.s0123, h.s456789ab, h.scde) -     (float16)(h.s123, h.s4567, h.s89abdcef, i);
 
-            int16 Gy =  (int16)(a, b.s0123, b.s456789ab, b.scde) + 2 * b + (int16)(b.s123, b.s4567, b.s89abdcef, c) -
-                        (int16)(g, h.s0123, h.s456789ab, h.scde) - 2 * h - (int16)(h.s123, h.s4567, h.s89abdcef, i);
+            float16 Gy =  (float16)(a, b.s0123, b.s456789ab, b.scde) + 2 * b + (float16)(b.s123, b.s4567, b.s89abdcef, c) -
+                        (float16)(g, h.s0123, h.s456789ab, h.scde) - 2 * h - (float16)(h.s123, h.s4567, h.s89abdcef, i);
 
-            float16 gx = convert_float16(Gx);
-            float16 gy = convert_float16(Gy);
-            float16 an = myatan2f16(gy, gx);
+            float16 an = myatan2f16(Gy, Gx);
             an = myselectf16(an, an + 6.2831853f, an < 0);
-            grad_x[dstIndex]   = gx;
-            grad_y[dstIndex]   = gy;
+            grad_x[dstIndex]   = Gx;
+            grad_y[dstIndex]   = Gy;
             grad_dir[dstIndex] = an;
        }
       )CLC",
