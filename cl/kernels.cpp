@@ -206,9 +206,9 @@ cl::Program getCompiledKernels()
         __kernel void SobelDetector( __global const uchar16* restrict input,  __global float16* restrict grad_x,  __global float16* restrict grad_y,  __global float16* restrict grad_dir)
         {
             uint dstXStride = get_global_size(0); //original width / 16
-            uint dstIndex   = get_global_id(1) * dstXStride + get_global_id(0);
+            uint dstIndex   = 16 * get_global_id(1) * dstXStride + get_global_id(0);
             uint srcXStride = dstXStride + 2;
-            uint srcIndex   = get_global_id(1) * srcXStride + get_global_id(0) + 1;
+            uint srcIndex   = 16 * get_global_id(1) * srcXStride + get_global_id(0) + 1;
 
 
 
@@ -220,24 +220,30 @@ cl::Program getCompiledKernels()
             float   d = (( __global const uchar*)(input + srcIndex))[-1];
             float16 e = convert_float16(vload16(0, ( __global const uchar*)(input + srcIndex)));
             float   f = (( __global const uchar*)(input + srcIndex))[16];
-            srcIndex += srcXStride;
 
+            for (int k = 0; k < 16; ++k)
+            {
+            srcIndex += srcXStride;
             float   g = (( __global const uchar*)(input + srcIndex))[-1];
             float16 h = convert_float16(vload16(0, ( __global const uchar*)(input + srcIndex)));
             float   i = (( __global const uchar*)(input + srcIndex))[16];
 
             float16 Gx =  (float16)    (a, b.s0123, b.s456789ab, b.scde) -     (float16)(b.s123, b.s4567, b.s89abdcef, c) +
-                        2 * (float16)(d, e.s0123, e.s456789ab, e.scde) - 2 * (float16)(e.s123, e.s4567, e.s89abdcef, f) +
+                        2.f * (float16)(d, e.s0123, e.s456789ab, e.scde) - 2.f * (float16)(e.s123, e.s4567, e.s89abdcef, f) +
                         (float16)    (g, h.s0123, h.s456789ab, h.scde) -     (float16)(h.s123, h.s4567, h.s89abdcef, i);
 
-            float16 Gy =  (float16)(a, b.s0123, b.s456789ab, b.scde) + 2 * b + (float16)(b.s123, b.s4567, b.s89abdcef, c) -
-                        (float16)(g, h.s0123, h.s456789ab, h.scde) - 2 * h - (float16)(h.s123, h.s4567, h.s89abdcef, i);
+            float16 Gy =  (float16)(a, b.s0123, b.s456789ab, b.scde) + 2.f * b + (float16)(b.s123, b.s4567, b.s89abdcef, c) -
+                        (float16)(g, h.s0123, h.s456789ab, h.scde) - 2.f * h - (float16)(h.s123, h.s4567, h.s89abdcef, i);
 
             float16 an = myatan2f16(Gy, Gx);
             an = myselectf16(an, an + 6.2831853f, an < 0);
             vstore16(Gx, 0, ( __global float*)(grad_x + dstIndex));
             vstore16(Gy, 0, ( __global float*)(grad_y + dstIndex));
             vstore16(an, 0, ( __global float*)(grad_dir + dstIndex));
+            a = d; b = e; c = f;
+            d = g; e = h; f = i;
+            dstIndex += dstXStride;
+            }
        }
       )CLC",
     };
@@ -395,27 +401,44 @@ void openCl::magic(bool is_deeper_magic, const float alpha_s, const float fore_t
     pres.updateMatrixIfNeeded();
 }
 
+static int align16(int v)
+{
+    if (v % 16 == 0)
+        return v;
+    return (1 + v / 16) * 16;
+}
+
 void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angle)
 {
-    static cv::Mat gray_buf(gray.rows + 2, gray.cols + 32, gray.depth());
-    {
-        TimeMeasure t("copyMakeBorder");
-        cv::copyMakeBorder(gray, gray_buf, 1, 1, 16, 16, cv::BORDER_REPLICATE);
-    }
+    const auto aw = align16(gray.cols);
+    const auto ah = align16(gray.rows);
+    const bool useOrigin = aw == gray.cols && ah == gray.rows;
+    static cv::Mat aligned(aw, ah, gray.depth());
+    cv::Mat& src = (useOrigin) ? gray : aligned;
+    if (!useOrigin)
+        cv::copyMakeBorder(gray, aligned, 0, ah - gray.rows, 0, aw - gray.cols, cv::BORDER_REPLICATE);
+
+    static cv::Mat gray_buf(src.rows + 2, src.cols + 32, src.depth());
+    //3ms on PI
+    cv::copyMakeBorder(gray, gray_buf, 1, 1, 16, 16, cv::BORDER_REPLICATE);
+
     static MatProxy<uchar> pgray(1);//don't align, will run "rectangular" kernel
     pgray.assign(gray_buf, 0);
 
+    static cv::Mat agradx;
     static MatProxy<float> pgradx(1);
-    pgradx.assign(gradx, gray.rows, gray.cols);
+    pgradx.assign((useOrigin) ? gradx : agradx, src.rows, src.cols);
 
+    static cv::Mat agrady;
     static MatProxy<float> pgrady(1);
-    pgrady.assign(grady, gray.rows, gray.cols);
+    pgrady.assign((useOrigin) ? grady : agrady, src.rows, src.cols);
 
+    static cv::Mat aangle;
     static MatProxy<float> pangle(1);
-    pangle.assign(angle, gray.rows, gray.cols);
+    pangle.assign((useOrigin) ? angle : aangle, src.rows, src.cols);
 
     static auto gpus = gpuUsed;
-    //std::cout << "Gpus used for sobel: " << gpus <<  " " << width << "; " << height << std::endl;
+    std::cout << "Gpus used for sobel: " << gpus << std::endl;
 
     try
     {
@@ -427,7 +450,7 @@ void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angl
         while (true)
             try
             {
-                kernel(cl::EnqueueArgs(queue, cl::NDRange(gray.cols / 16, gray.rows), cl::NDRange(gpus)),  bgray, bgradx, bgrady, bangle).wait();
+                kernel(cl::EnqueueArgs(queue, cl::NDRange(gray.cols / 16, gray.rows / 16), cl::NDRange(gpus)),  bgray, bgradx, bgrady, bangle).wait();
                 break;
             }
             catch (cl::Error& err)
@@ -450,4 +473,16 @@ void openCl::sobel2(cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angl
     pgrady.updateMatrixIfNeeded();
     pangle.updateMatrixIfNeeded();
 
+    if (!useOrigin)
+    {
+        cv::Rect roi;
+        roi.x = 0;
+        roi.y = 0;
+        roi.width  = gray.cols;
+        roi.height = gray.rows;
+
+        agradx(roi).copyTo(gradx);
+        agrady(roi).copyTo(grady);
+        aangle(roi).copyTo(angle);
+    }
 }
