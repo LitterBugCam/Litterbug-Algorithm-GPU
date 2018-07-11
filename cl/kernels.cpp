@@ -26,6 +26,7 @@ static float gpu16 = 1.f / Align;
 //warning! I assume incoming memory is aligned to 16 * 12 !!! (12 cpus, 16 numbers per iteration in loop)
 cl::Program getCompiledKernels()
 {
+    //those functions are bugged or absent into current VC4C compiler (for r-pi), so need some custom implementation
     const static std::string support_funcs = R"CLC(
                                              float16 myselectf16(float16 afalse, float16 atrue, int16 condition)
                                              {
