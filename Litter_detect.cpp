@@ -147,67 +147,65 @@ static void execute(const char* videopath, std::ofstream& results)
         assert(abandoned_map.isContinuous());
         auto plain_map_ptr = abandoned_map.ptr<uchar>();
         //ok, original sobel + magic takes 550 - 650 ms
-#ifndef NO_FPS
+
+
+        if (i == 0)
         {
-            TimeMeasure tm("SobelMagic");
-#endif
+            cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
+            cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
+            continue;
+        }
 
-            if (i == 0)
+        cl->sobel2magic(i % framemod2 == 0, i > frameinit && i % framemod2 == 0, alpha_S, fore_th, gray, grad_x, grad_y, angles.getStorage(), abandoned_map);
+
+        if (i > frameinit && i % framemod2 == 0)
+        {
+
+            TimeMeasure tm("2nd Loop");
+            for (fullbits_int_t j = 1; j < image.rows - 1; ++j)
             {
-                cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
-                cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
-                continue;
-            }
-
-            cl->sobel2magic(i % framemod2 == 0, i > frameinit && i % framemod2 == 0, alpha_S, fore_th, gray, grad_x, grad_y, angles.getStorage(), abandoned_map);
-
-            if (i > frameinit && i % framemod2 == 0)
-            {
-
-                for (fullbits_int_t j = 1; j < image.rows - 1; ++j)
+                plain_map_ptr += image.cols;
+                for (fullbits_int_t k = 1; k < image.cols - 1; ++k)
                 {
-                    plain_map_ptr += image.cols;
-                    for (fullbits_int_t k = 1; k < image.cols - 1; ++k)
-                    {
-                        auto point = plain_map_ptr + k;
+                    auto point = plain_map_ptr + k;
 
-                        //hmm, this code can be removed for test image - same result
-                        if (*point > aotime2 && *point < aotime)
-                            for (fullbits_int_t c0 = -1; c0 <= 1; ++c0)
+                    //hmm, this code can be removed for test image - same result
+                    if (*point > aotime2 && *point < aotime)
+                        for (fullbits_int_t c0 = -1; c0 <= 1; ++c0)
+                        {
+                            if (c0 && *(point + c0) > aotime) //excluding c0 = 0 which is meself
                             {
-                                if (c0 && *(point + c0) > aotime) //excluding c0 = 0 which is meself
-                                {
-                                    *point = aotime;
-                                    break;
-                                }
-
-                                if (*(point + image.cols + c0) > aotime )
-                                {
-                                    *point = aotime;
-                                    break;
-                                }
-
-                                if (*(point - image.cols + c0) > aotime )
-                                {
-                                    *point = aotime;
-                                    break;
-                                }
+                                *point = aotime;
+                                //break;
                             }
-                    }
+
+                            if (*(point + image.cols + c0) > aotime )
+                            {
+                                *point = aotime;
+                                //break;
+                            }
+
+                            if (*(point - image.cols + c0) > aotime )
+                            {
+                                *point = aotime;
+                                //break;
+                            }
+                        }
                 }
             }
-#ifndef NO_FPS
         }
-#endif
 
-        cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
+        {
+            TimeMeasure tm("Th x2 + Canny");
+            cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
+            cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
+            cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
+
+        }
         abandoned_objects.populateObjects(frame, i);
-        cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
-
-        cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
-
 
 #ifndef NO_GUI
+        //abandoned_map.copyTo(frame);
         image.copyTo(frame);
 #endif
         for (auto& atu : abandoned_objects.candidat)
@@ -222,7 +220,7 @@ static void execute(const char* videopath, std::ofstream& results)
                     atu.extraLife();
                     results << " x: " << params.rr << " y: " << params.cc << " w: " << params.w << " h: " << params.h << std::endl;
 #ifndef NO_GUI
-                    const static cv::Scalar color(0, 0, 255);
+                    const static cv::Scalar color(255, 255, 255);
                     cv::rectangle(frame, cv::Rect(atu.origin, atu.endpoint), color, 2);
 #endif
                 }
@@ -243,8 +241,7 @@ static void execute(const char* videopath, std::ofstream& results)
                     1, // Line Thickness
                     CV_AA); // Anti-alias
 
-        cv::imshow("output", frame);//ok,those 2 take around -5 fps on i7
-        //cv::imshow("output", abandoned_map);
+        cv::imshow("output", frame);
         if (27 == cv::waitKey(10))
             break;
 #endif

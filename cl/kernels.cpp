@@ -205,25 +205,18 @@ cl::Program getCompiledKernels()
             float16 D_Sy = Gy - by;
             by += D_Sy * as;
             vstore16(by, 0, ( __global float*)(BSy + dstIndex));
-
-            if (is_plus2 || is_minus1)
-            {
             int16 mr           = convert_int16(vload16(0, ( __global uchar*)(mapRes + dstIndex)));
             mr -= is_minus1;
+            int16 c1 = isgreater(fabs(D_Sx), fth) && isgreater(fabs(Gx), v19);
+            int16 c2 = isgreater(fabs(D_Sy), fth) && isgreater(fabs(Gy), v19);
 
-            if (is_plus2)
-            {
-               int16 c1 = isgreater(fabs(D_Sx), fth) && isgreater(fabs(Gx), v19);
-               int16 c2 = isgreater(fabs(D_Sy), fth) && isgreater(fabs(Gy), v19);
+            mr += myselecti16(zeros, ones, c2 || c1) * twos;
+            c1 = mr < zeros;
+            c2 = myselecti16(mr, zeros, c1);//overflow protection
+            c1 = c2 > twos5;
+            mr = is_plus2 * myselecti16(c2, twos5, c1); //overflow protection
 
-               mr += myselecti16(zeros, ones, c2 || c1) * twos;
-               c1 = mr < zeros;
-               c2 = myselecti16(mr, zeros, c1);//overflow protection
-               c1 = c2 > twos5;
-               mr = is_plus2 * myselecti16(c2, twos5, c1); //overflow protection
-            }
             vstore16(convert_uchar16(mr), 0, ( __global uchar*)(mapRes + dstIndex));
-            }
             dstIndex += dstXStride;
             }
        }
