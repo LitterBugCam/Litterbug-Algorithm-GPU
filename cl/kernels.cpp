@@ -342,8 +342,10 @@ int32_t TimeMeasure::now()
 }
 
 
-#define VARS(NAME,TYPE) static MatProxy<TYPE> p##NAME(1); p##NAME.assign(NAME, gray.rows, gray.cols)
-#define COPYB(NAME) cl::copy(b##NAME,  p##NAME.w_ptr(),  p##NAME.end());
+//#define VARS(NAME,TYPE) static MatProxy<TYPE> p##NAME(1); p##NAME.assign(NAME, gray.rows, gray.cols)
+#define VARS(NAME,TYPE) static MatProxy<TYPE> p##NAME(NAME, gray.rows, gray.cols, 1);
+#define COPYD2H(NAME) cl::copy(queue, b##NAME,  p##NAME.w_ptr(),  p##NAME.end());
+#define COPYH2D(NAME) cl::copy(queue, p##NAME.r_ptr(),  p##NAME.end(), b##NAME);
 
 void openCl::sobel2magic(bool is_minus1, bool is_plus2, const float alpha_s, const float fore_th, cv::Mat &gray, cv::Mat &gradx, cv::Mat &grady, cv::Mat& angle, cv::Mat& mapR)
 {
@@ -353,7 +355,6 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, const float alpha_s, con
     VARS(mapR,  uint8_t);
 
     static cv::Mat gray_buf(gray.rows + 2, gray.cols + 32, gray.depth());
-    //3ms on PI
     cv::copyMakeBorder(gray, gray_buf, 1, 1, 16, 16, cv::BORDER_REPLICATE);
 
     static MatProxy<uchar> pgray(1);//don't align, will run "rectangular" kernel
@@ -363,10 +364,16 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, const float alpha_s, con
 
     static cv::Mat abx;
     static cv::Mat aby;
-    static MatProxy<float> pbx(1);
-    pbx.assign(abx, gray.rows, gray.cols);
-    static MatProxy<float> pby(1);
-    pby.assign(aby, gray.rows, gray.cols);
+    static MatProxy<float> pbx(abx, gray.rows, gray.cols, 1);
+    static MatProxy<float> pby(aby, gray.rows, gray.cols, 1);
+
+    static cl::Buffer bgray (queue, pgray.w_ptr(),    pgray.end(),  true, false);
+    static cl::Buffer bgradx(queue, pgradx.w_ptr(),   pgradx.end(), false, false);
+    static cl::Buffer bgrady(queue, pgrady.w_ptr(),   pgrady.end(), false, false);
+    static cl::Buffer bangle(queue, pangle.w_ptr(),   pangle.end(), false, false);
+    static cl::Buffer bbx   (queue, pbx.w_ptr(),   pbx.end(),  false, false);
+    static cl::Buffer bby   (queue, pby.w_ptr(),   pby.end(),  false, false);
+    static cl::Buffer bmapR (queue, pmapR.w_ptr(),  pmapR.end(), false, false);
 
     static bool once = true;
     if (once)
@@ -374,25 +381,20 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, const float alpha_s, con
         once = false;
         gradx.copyTo(abx);
         grady.copyTo(aby);
+        COPYH2D(bx);
+        COPYH2D(by);
     }
 
 
 
     static auto gpus = gpuUsed;
     //std::cout << "Gpus used for sobel: " << gpus << std::endl;
-
+    std::cout << ((size_t)pangle.w_ptr()) << "   " << ((size_t)pmapR.w_ptr()) << std::endl;
     try
     {
         auto kernel = cl::KernelFunctor<int, int, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&> (Kernels, "SobelAndMagicDetector");
-        cl::Buffer bgray (queue,  pgray.r_ptr(),    pgray.end(),  true,  true);
-        cl::Buffer bgradx( queue, pgradx.w_ptr(),   pgradx.end(), false, true);
-        cl::Buffer bgrady( queue, pgrady.w_ptr(),   pgrady.end(), false, true);
-        cl::Buffer bangle( queue, pangle.w_ptr(),   pangle.end(), false, true);
-        cl::Buffer bbx( queue, pbx.r_ptr(),   pbx.end(),  false, true);
-        cl::Buffer bby( queue, pby.r_ptr(),   pby.end(),  false, true);
-        cl::Buffer bmapR(queue, pmapR.r_ptr(),  pmapR.end(), false, true);
-
-
+        COPYH2D(gray);
+        COPYH2D(mapR);
         while (true)
             try
             {
@@ -409,13 +411,13 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, const float alpha_s, con
                 }
                 throw err;
             }
-        COPYB(gradx);
-        COPYB(grady);
-        COPYB(angle);
-        COPYB(bx);
-        COPYB(by);
+        COPYD2H(gradx);
+        COPYD2H(grady);
+        COPYD2H(angle);
+        COPYD2H(bx);
+        COPYD2H(by);
         if (is_plus2 || is_minus1)
-            COPYB(mapR);
+            COPYD2H(mapR);
     }
     CATCHCL
 
@@ -432,4 +434,4 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, const float alpha_s, con
 }
 #undef VARS
 #undef COPY
-#undef COPYB
+#undef COPYD2H
