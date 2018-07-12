@@ -147,60 +147,68 @@ static void execute(const char* videopath, std::ofstream& results)
         auto plain_map_ptr  = abandoned_map.ptr<uchar>();
 
         //ok, original sobel + magic takes 550 - 650 ms
-
-        cl->sobel2magic(i % framemod2 == 0, i > frameinit && i % framemod2 == 0, i == 0, alpha_S, fore_th, gray, angles.getStorage(), abandoned_map);
-
-        if (i > frameinit && i % framemod2 == 0)
         {
-            for (fullbits_int_t j = 1; j < abandoned_map.rows - 1; ++j)
-            {
-                plain_map_ptr  += abandoned_map.cols;
+            TimeMeasure tm("Sobel part");
 
-                for (fullbits_int_t k = 1; k < abandoned_map.cols - 1; ++k)
+            cl->sobel2magic(i % framemod2 == 0, i > frameinit && i % framemod2 == 0, i == 0, alpha_S, fore_th, gray, angles.getStorage(), abandoned_map);
+
+            if (i > frameinit && i % framemod2 == 0)
+            {
+                for (fullbits_int_t j = 1; j < abandoned_map.rows - 1; ++j)
                 {
-                    auto point  = plain_map_ptr + k;
-                    //hmm, this code can be removed for test image - same result
-                    if (*point > aotime2 && *point < aotime)
-                        for (fullbits_int_t c0 = -1; c0 <= 1; ++c0)
-                        {
-                            if ((c0 && *(point + c0) > aotime) || *(point + abandoned_map.cols + c0) > aotime || *(point - abandoned_map.cols + c0) > aotime ) //excluding c0 = 0 which is meself
+                    plain_map_ptr  += abandoned_map.cols;
+
+                    for (fullbits_int_t k = 1; k < abandoned_map.cols - 1; ++k)
+                    {
+                        auto point  = plain_map_ptr + k;
+                        //hmm, this code can be removed for test image - same result
+                        if (*point > aotime2 && *point < aotime)
+                            for (fullbits_int_t c0 = -1; c0 <= 1; ++c0)
                             {
-                                *point = aotime;
-                                break;
+                                if ((c0 && *(point + c0) > aotime) || *(point + abandoned_map.cols + c0) > aotime || *(point - abandoned_map.cols + c0) > aotime ) //excluding c0 = 0 which is meself
+                                {
+                                    *point = aotime;
+                                    break;
+                                }
                             }
-                        }
+                    }
                 }
             }
         }
-
-        cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
-        cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
-        cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
-
-
-        abandoned_objects.populateObjects(frame, i);
-
+        {
+            TimeMeasure tm("Canny part");
+            cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
+            cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
+            cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
+        }
+        {
+            TimeMeasure tm("object populate ");
+            abandoned_objects.populateObjects(frame, i);
+        }
 #ifndef NO_GUI
         //!!!!!!!!!!!!!!VISUAL CONTROL HERE, make copy of needed Mat to frame and comment others
         //! to see pictures of what's going on (to display frame itself - just comment all)
         //abandoned_map.copyTo(frame);
         image.copyTo(frame);
 #endif
-        for (auto& atu : abandoned_objects.candidat)
         {
-            if (!atu.isTooSmall(minsize))
+            TimeMeasure tm("Testing candidates ");
+            for (auto& atu : abandoned_objects.candidat)
             {
-                es_param_t params = atu.getScoreParams(image.rows, image.cols);
-                edge_segments(object_map, angles, canny, params);
-                if (params.score > staticness_th && params.circularity > objectness_th && params.circularity < 1000000)
+                if (!atu.isTooSmall(minsize))
                 {
-                    //hm, lets do cheat, if we display object then +1 to life
-                    atu.extraLife();
-                    results << " x: " << params.rr << " y: " << params.cc << " w: " << params.w << " h: " << params.h << std::endl;
+                    es_param_t params = atu.getScoreParams(image.rows, image.cols);
+                    edge_segments(object_map, angles, canny, params);
+                    if (params.score > staticness_th && params.circularity > objectness_th && params.circularity < 1000000)
+                    {
+                        //hm, lets do cheat, if we display object then +1 to life
+                        atu.extraLife();
+                        results << " x: " << params.rr << " y: " << params.cc << " w: " << params.w << " h: " << params.h << std::endl;
 #ifndef NO_GUI
-                    const static cv::Scalar color(255, 255, 255);
-                    cv::rectangle(frame, cv::Rect(atu.origin, atu.endpoint), color, 2);
+                        const static cv::Scalar color(255, 255, 255);
+                        cv::rectangle(frame, cv::Rect(atu.origin, atu.endpoint), color, 2);
 #endif
+                    }
                 }
             }
         }
