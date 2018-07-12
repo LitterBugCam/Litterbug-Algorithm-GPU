@@ -181,37 +181,35 @@ static void execute(const char* videopath, std::ofstream& results)
             cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
             cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
         }
-        {
-            TimeMeasure tm("object populate ");
-            abandoned_objects.populateObjects(frame, i);
-        }
+
+        abandoned_objects.populateObjects(frame, i);
+
 #ifndef NO_GUI
         //!!!!!!!!!!!!!!VISUAL CONTROL HERE, make copy of needed Mat to frame and comment others
         //! to see pictures of what's going on (to display frame itself - just comment all)
         //abandoned_map.copyTo(frame);
         image.copyTo(frame);
 #endif
+
+        for (auto& atu : abandoned_objects.candidat)
         {
-            TimeMeasure tm("Testing candidates ");
-            for (auto& atu : abandoned_objects.candidat)
+            if (!atu.isTooSmall(minsize))
             {
-                if (!atu.isTooSmall(minsize))
+                es_param_t params = atu.getScoreParams(image.rows, image.cols);
+                edge_segments(object_map, angles, canny, params);
+                if (params.score > staticness_th && params.circularity > objectness_th && params.circularity < 1000000)
                 {
-                    es_param_t params = atu.getScoreParams(image.rows, image.cols);
-                    edge_segments(object_map, angles, canny, params);
-                    if (params.score > staticness_th && params.circularity > objectness_th && params.circularity < 1000000)
-                    {
-                        //hm, lets do cheat, if we display object then +1 to life
-                        atu.extraLife();
-                        results << " x: " << params.rr << " y: " << params.cc << " w: " << params.w << " h: " << params.h << std::endl;
+                    //hm, lets do cheat, if we display object then +1 to life
+                    atu.extraLife();
+                    results << " x: " << params.rr << " y: " << params.cc << " w: " << params.w << " h: " << params.h << std::endl;
 #ifndef NO_GUI
-                        const static cv::Scalar color(255, 255, 255);
-                        cv::rectangle(frame, cv::Rect(atu.origin, atu.endpoint), color, 2);
+                    const static cv::Scalar color(255, 255, 255);
+                    cv::rectangle(frame, cv::Rect(atu.origin, atu.endpoint), color, 2);
 #endif
-                    }
                 }
             }
         }
+
 #ifndef NO_GUI
 #ifndef NO_FPS
         const std::string text = "FPS: " + std::to_string(meanfps / (i + 1)) + ", candidats count: " + std::to_string(abandoned_objects.candidat.size());
