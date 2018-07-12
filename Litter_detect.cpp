@@ -147,11 +147,10 @@ static void execute(const char* videopath, std::ofstream& results)
         auto plain_map_ptr  = abandoned_map.ptr<uchar>();
 
         //ok, original sobel + magic takes 550 - 650 ms
+
+        cl->sobel2magic(i % framemod2 == 0, i > frameinit && i % framemod2 == 0, i == 0, alpha_S, fore_th, gray, angles.getStorage(), abandoned_map);
         {
-            TimeMeasure tm("Sobel part");
-
-            cl->sobel2magic(i % framemod2 == 0, i > frameinit && i % framemod2 == 0, i == 0, alpha_S, fore_th, gray, angles.getStorage(), abandoned_map);
-
+            TimeMeasure tm("Abba map postprocess");
             if (i > frameinit && i % framemod2 == 0)
             {
                 for (fullbits_int_t j = 1; j < abandoned_map.rows - 1; ++j)
@@ -174,13 +173,15 @@ static void execute(const char* videopath, std::ofstream& results)
                     }
                 }
             }
-        }
-        {
-            TimeMeasure tm("Canny part");
+
             cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
             cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
+        }
+        {
+            TimeMeasure tm("Canny only");
             cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
         }
+
 
         abandoned_objects.populateObjects(frame, i);
 
