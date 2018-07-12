@@ -148,39 +148,40 @@ static void execute(const char* videopath, std::ofstream& results)
 
         //ok, original sobel + magic takes 550 - 650 ms
 
-        cl->sobel2magic(i % framemod2 == 0, i > frameinit && i % framemod2 == 0, i == 0, alpha_S, fore_th, gray, angles.getStorage(), abandoned_map);
+        cl->sobel2magic(i % framemod2 == 0, i > frameinit && i % framemod2 == 0, i == 0, alpha_S, fore_th, gray,
+                        angles.getStorage(), abandoned_map, canny.getStorage());
+
+
+        if (i > frameinit && i % framemod2 == 0)
         {
             TimeMeasure tm("Abba map postprocess");
-            if (i > frameinit && i % framemod2 == 0)
+            for (fullbits_int_t j = 1; j < abandoned_map.rows - 1; ++j)
             {
-                for (fullbits_int_t j = 1; j < abandoned_map.rows - 1; ++j)
-                {
-                    plain_map_ptr  += abandoned_map.cols;
+                plain_map_ptr  += abandoned_map.cols;
 
-                    for (fullbits_int_t k = 1; k < abandoned_map.cols - 1; ++k)
-                    {
-                        auto point  = plain_map_ptr + k;
-                        //hmm, this code can be removed for test image - same result
-                        if (*point > aotime2 && *point < aotime)
-                            for (fullbits_int_t c0 = -1; c0 <= 1; ++c0)
+                for (fullbits_int_t k = 1; k < abandoned_map.cols - 1; ++k)
+                {
+                    auto point  = plain_map_ptr + k;
+                    //hmm, this code can be removed for test image - same result
+                    if (*point > aotime2 && *point < aotime)
+                        for (fullbits_int_t c0 = -1; c0 <= 1; ++c0)
+                        {
+                            if ((c0 && *(point + c0) > aotime) || *(point + abandoned_map.cols + c0) > aotime || *(point - abandoned_map.cols + c0) > aotime ) //excluding c0 = 0 which is meself
                             {
-                                if ((c0 && *(point + c0) > aotime) || *(point + abandoned_map.cols + c0) > aotime || *(point - abandoned_map.cols + c0) > aotime ) //excluding c0 = 0 which is meself
-                                {
-                                    *point = aotime;
-                                    break;
-                                }
+                                *point = aotime;
+                                break;
                             }
-                    }
+                        }
                 }
             }
+        }
+        cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
+        cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
 
-            cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
-            cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
-        }
-        {
-            TimeMeasure tm("Canny only");
-            cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3);
-        }
+        //        {
+        //            TimeMeasure tm("Canny only");
+        cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3); //Canny only took (ms): 156
+        //        }
 
 
         abandoned_objects.populateObjects(frame, i);
@@ -190,6 +191,8 @@ static void execute(const char* videopath, std::ofstream& results)
         //! to see pictures of what's going on (to display frame itself - just comment all)
         //abandoned_map.copyTo(frame);
         image.copyTo(frame);
+
+        //canny.getStorage().copyTo(frame);
 #endif
 
         for (auto& atu : abandoned_objects.candidat)

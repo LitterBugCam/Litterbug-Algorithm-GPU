@@ -51,6 +51,15 @@ cl::Program getCompiledKernels()
                                                  return atrue * cond + afalse * not_cond;
                                              }
 
+                                             uchar16 myselectuc16(uchar16 afalse, uchar16 atrue, int16 condition)
+                                             {
+                                                 //we have -1 = true in condition ...it should be so
+                                                 uchar16 one = 1;
+                                                 uchar16 cond     = convert_uchar16(condition * condition);
+                                                 uchar16 not_cond = one - cond;
+                                                 return atrue * cond + afalse * not_cond;
+                                             }
+
                                              int16 myselecti1(int afalse, int atrue, int condition)
                                              {
                                                  int16 cond     = condition * condition;
@@ -151,6 +160,7 @@ cl::Program getCompiledKernels()
         __kernel void SobelAndMagicDetector(const int is_minus1, const int is_plus2, const int is_first_run, const float alpha_s, const float fore_th,
                                             INP_MEM uchar16* restrict input, __global float16* restrict grad_dir,
                                             __global float16* restrict BSx,  __global float16* restrict BSy, __global uchar16* restrict mapRes
+                                            ,__global float16* restrict alignedGAngle, __global float16* restrict alignedGMod
                                            )
         {
             uint dstXStride = get_global_size(0); //original width / 16
@@ -177,22 +187,31 @@ cl::Program getCompiledKernels()
 
             for (int k = 0; k < 16; ++k)
             {
+            uint dstAlignedIndex = srcIndex; //ok, I hope that is correct, i.e. middle of the matrix is index
+
             srcIndex += srcXStride;
             float   g = (( INP_MEM uchar*)(input + srcIndex))[-1];
             float16 h = convert_float16(vload16(0, (INP_MEM uchar*)(input + srcIndex)));
             float   i = (( INP_MEM uchar*)(input + srcIndex))[16];
 
-            float16 Gx =  (float16)    (a, b.s0123, b.s456789ab, b.scde) -     (float16)(b.s123, b.s4567, b.s89abdcef, c) +
-                        2.f * (float16)(d, e.s0123, e.s456789ab, e.scde) - 2.f * (float16)(e.s123, e.s4567, e.s89abdcef, f) +
-                        (float16)    (g, h.s0123, h.s456789ab, h.scde) -     (float16)(h.s123, h.s4567, h.s89abdcef, i);
+            float16 Gx =  (float16)    (a, b.s0123, b.s456789ab, b.scde) -     (float16)(b.s123, b.s4567, b.s89abcdef, c) +
+                        2.f * (float16)(d, e.s0123, e.s456789ab, e.scde) - 2.f * (float16)(e.s123, e.s4567, e.s89abcdef, f) +
+                        (float16)    (g, h.s0123, h.s456789ab, h.scde) -     (float16)(h.s123, h.s4567, h.s89abcdef, i);
 
-            float16 Gy =  (float16)(a, b.s0123, b.s456789ab, b.scde) + 2.f * b + (float16)(b.s123, b.s4567, b.s89abdcef, c) -
-                        (float16)(g, h.s0123, h.s456789ab, h.scde) - 2.f * h - (float16)(h.s123, h.s4567, h.s89abdcef, i);
+            float16 Gy =  (float16)(a, b.s0123, b.s456789ab, b.scde) + 2.f * b + (float16)(b.s123, b.s4567, b.s89abcdef, c) -
+                        (float16)(g, h.s0123, h.s456789ab, h.scde) - 2.f * h - (float16)(h.s123, h.s4567, h.s89abcdef, i);
 
             float16 an = myatan2f16(Gy, Gx);
+
+
+            //prepairing stuff for Canny - result will be gradient with [0; pi) - we dont care if it poinst left or right there
+            vstore16(myselectf16(an, an + 3.14159265f, isless(an, 0)), 0, ( __global float*)(alignedGAngle + dstAlignedIndex));
+            vstore16(fabs(Gx) + fabs(Gy), 0, ( __global float*)(alignedGMod + dstAlignedIndex)); //instead sqrt
+            //vstore16(sqrt(Gx * Gx + Gy * Gy), 0, ( __global float*)(alignedGMod + dstAlignedIndex)); //maybe not working on PI
+            //done here, must know full matrix prior can do non-maximum supression etc.
+
             an = myselectf16(an, an + 6.2831853f, isless(an, 0));
             vstore16(an, 0, ( __global float*)(grad_dir + dstIndex));
-
             a = d; b = e; c = f;
             d = g; e = h; f = i;
 
@@ -222,6 +241,148 @@ cl::Program getCompiledKernels()
             dstIndex += dstXStride;
             }
        }
+        //that is not full Canny, it uses pre-processed values from prior SobelAndMagicDetector
+        //expecting angle is specially prepared in [0;pi) so we lost left or right, top or bottom, but we don't care here
+       __kernel void Canny(INP_MEM float16* restrict alignedGAngle, INP_MEM float16* restrict alignedGMod, __global float16* N)
+        {
+              const float16 pi8 = 0.39269908125f; //pi/8 (half width of interval around gradient ray)
+              const float16 pi4 = 0.7853981625f;
+              const float16 pi34= 3.f * 0.7853981625f;
+              const float16 pi2 = 1.570796325f;
+              const float16 pi1 = 3.14159265f;
+
+              uint dstXStride = get_global_size(0); //original width / 16
+              uint dstIndex   = 16 * get_global_id(1) * dstXStride + get_global_id(0);
+              uint srcXStride = dstXStride + 2;
+              uint srcIndex   = 16 * get_global_id(1) * srcXStride + get_global_id(0) + 1;
+
+
+              float   a = (( INP_MEM float*)(alignedGMod + srcIndex))[-1];//-1; -1 corner
+              float16 b = convert_float16(vload16(0, ( INP_MEM float*)(alignedGMod + srcIndex)));
+              float   c = (( INP_MEM float*)(alignedGMod + srcIndex))[16];
+              srcIndex += srcXStride;
+
+              float   d = (( INP_MEM float*)(alignedGMod + srcIndex))[-1]; //-1;0
+              float16 e = convert_float16(vload16(0, ( INP_MEM float*)(alignedGMod + srcIndex)));
+              float   f = (( INP_MEM float*)(alignedGMod + srcIndex))[16];
+
+              for (int k = 0; k < 16; ++k)
+              {
+                  uint dstPaddedIndex = srcIndex;
+                  float16 angle = convert_float16(vload16(0, ( INP_MEM float*)(alignedGAngle + srcIndex)));
+                  srcIndex += srcXStride;
+                  float   g = (( INP_MEM float*)(alignedGMod + srcIndex))[-1];
+                  float16 h = convert_float16(vload16(0, (INP_MEM float*)(alignedGMod + srcIndex)));
+                  float   i = (( INP_MEM float*)(alignedGMod + srcIndex))[16];//+1; +1 corner
+
+                  //now we have loaded all 9 points (3x3) and x16 of them
+                  //need to figure gradient line and pick 2 of 8 around current
+                  float16 p1 = 0;
+                  float16 p2 = 0;
+                  int16   atest = 0;
+
+                  //pi/4 = 45 degree ... not sure though, in C++ examples it's weird direction, I assume 45 vector points to x + 1 and y - 1
+                  atest =  isless(fabs(angle-pi4), pi8);
+                  p1 = myselectf16(p1,(float16)(b.s123, b.s4567, b.s89abcdef, c), atest);
+                  p2 = myselectf16(p2,(float16)(g, h.s0123, h.s456789ab, h.scde), atest);
+
+                  //possibly should switch p4 and p34 - that means 0 is at left
+                  atest =  isless(fabs(angle-pi34), pi8);
+                  p1 = myselectf16(p1,(float16)(a, b.s0123, b.s456789ab, b.scde), atest);
+                  p2 = myselectf16(p2,(float16)(h.s123, h.s4567, h.s89abcdef, i), atest);
+
+                  atest =  isless(fabs(angle-pi2), pi8);
+                  p1 = myselectf16(p1, b, atest);
+                  p2 = myselectf16(p2, h, atest);
+
+                  atest =  isless(fabs(angle), pi8);
+                  p1 = myselectf16(p1, (float16)(d, e.s0123, e.s456789ab, e.scde), atest);
+                  p2 = myselectf16(p2, (float16)(e.s123, e.s4567, e.s89abcdef, f), atest);
+
+                  vstore16(e, 0, ( __global float*)(N + dstPaddedIndex));//DELETE IT, UNCOMMENT BELOW
+
+                  float16 n = myselectf16(0, e, isless(p2, e) && isless(p1, e)); //not sure maybe isless(e, p1) and even swap p1/p2 ... diff articles show different
+                  a = d; b = e; c = f;
+                  d = g; e = h; f = i;
+                  //okey n now is non-maximum supressed 16 points at once...should I store or can use right now...lets try to figure
+                  //If the pixel gradient is between the two thresholds, then it will be accepted only if it is connected to a pixel that is above the upper threshold.
+                  //so this means we must store full picture (padded with extra pixels again!)...and run through it again
+                  //vstore16(n, 0, ( __global float*)(N + dstPaddedIndex));
+              }
+        };
+        __kernel void hysterisis(INP_MEM float16* restrict alignedGAngle, INP_MEM float16* restrict paddedN, __global uchar16* result)
+        {
+             const float16 pi8 = 0.39269908125f; //pi/8 (half width of interval around gradient ray)
+             const float16 pi4 = 0.7853981625f;
+             const float16 pi34= 3.f * 0.7853981625f;
+             const float16 pi2 = 1.570796325f;
+             const float16 pi1 = 3.14159265f;
+
+             const float16 T1  = 30.f; //treshholds, from original cpp file for hysterisis
+             const float16 T2  = 90.f;
+             uint dstXStride = get_global_size(0); //original width / 16
+             uint dstIndex   = 16 * get_global_id(1) * dstXStride + get_global_id(0);
+             uint srcXStride = dstXStride + 2;
+             uint srcIndex   = 16 * get_global_id(1) * srcXStride + get_global_id(0) + 1;
+
+             float   a = (( INP_MEM float*)(paddedN + srcIndex))[-1];//-1; -1 corner
+             float16 b = convert_float16(vload16(0, ( INP_MEM float*)(paddedN + srcIndex)));
+             float   c = (( INP_MEM float*)(paddedN + srcIndex))[16];
+             srcIndex += srcXStride;
+
+             float   d = (( INP_MEM float*)(paddedN + srcIndex))[-1]; //-1;0
+             float16 e = convert_float16(vload16(0, ( INP_MEM float*)(paddedN + srcIndex)));
+             float   f = (( INP_MEM float*)(paddedN + srcIndex))[16];
+
+             for (int k = 0; k < 16; ++k)
+             {
+                 srcIndex += srcXStride;
+                 float16 angle = convert_float16(vload16(0, ( INP_MEM float*)(alignedGAngle + srcIndex)));
+
+                 float   g = (( INP_MEM float*)(paddedN + srcIndex))[-1];
+                 float16 h = convert_float16(vload16(0, (INP_MEM float*)(paddedN + srcIndex)));
+                 float   i = (( INP_MEM float*)(paddedN + srcIndex))[16];//+1; +1 corner
+
+                 float16 p1 = 0;
+                 float16 p2 = 0;
+                 int16   atest = 0;
+
+                 atest =  isless(fabs(angle-pi4), pi8);
+                 p1 = myselectf16(p1,(float16)(b.s123, b.s4567, b.s89abcdef, c), atest);
+                 p2 = myselectf16(p2,(float16)(g, h.s0123, h.s456789ab, h.scde), atest);
+
+                //possibly should switch p4 and p34 - that means 0 is at left
+                 atest =  isless(fabs(angle-pi34), pi8);
+                 p1 = myselectf16(p1,(float16)(a, b.s0123, b.s456789ab, b.scde), atest);
+                 p2 = myselectf16(p2,(float16)(h.s123, h.s4567, h.s89abcdef, i), atest);
+
+                 atest =  isless(fabs(angle-pi2), pi8);
+                 p1 = myselectf16(p1, b, atest);
+                 p2 = myselectf16(p2, h, atest);
+
+                 atest =  isless(fabs(angle), pi8);
+                 p1 = myselectf16(p1, (float16)(d, e.s0123, e.s456789ab, e.scde), atest);
+                 p2 = myselectf16(p2, (float16)(e.s123, e.s4567, e.s89abcdef, f), atest);
+                 //If the pixel gradient is between the two thresholds, then it will be accepted only if it is connected to a pixel that is above the upper threshold.
+                 int16 surrounding_greater = 0;
+
+//                 surrounding_greater = surrounding_greater || isgreater((float16)(a, b.s0123, b.s456789ab, b.scde), T2);
+//                 surrounding_greater = surrounding_greater || isgreater((float16)(b.s123, b.s4567, b.s89abcdef, c), T2);
+//                 surrounding_greater = surrounding_greater || isgreater((float16)(d, e.s0123, e.s456789ab, e.scde), T2);
+//                 surrounding_greater = surrounding_greater || isgreater((float16)(e.s123, e.s4567, e.s89abcdef, f), T2);
+//                 surrounding_greater = surrounding_greater || isgreater((float16)(g, h.s0123, h.s456789ab, h.scde), T2);
+//                 surrounding_greater = surrounding_greater || isgreater((float16)(h.s123, h.s4567, h.s89abcdef, i), T2);
+//                 surrounding_greater = surrounding_greater || isgreater(b, T2);
+//                 surrounding_greater = surrounding_greater || isgreater(h, T2);
+                 surrounding_greater = surrounding_greater || isgreater(p1, T2) || isgreater(p2, T2); //in gradient direction
+                 surrounding_greater = surrounding_greater || isgreater(e, T2);//If a pixel gradient is higher than the upper threshold, the pixel is accepted as an edge
+                 surrounding_greater = surrounding_greater && isgreater(e, T1);//If a pixel gradient value is below the lower threshold, then it is rejected.
+                 //uchar16 hys = myselectuc16(0, 255, surrounding_greater);
+                 uchar16 hys = convert_uchar16(e);
+                 vstore16(hys, 0, ( __global uchar*)(result + dstIndex));
+                 dstIndex += dstXStride;
+             }
+        };
       )CLC",
     };
 
@@ -348,13 +509,25 @@ int32_t TimeMeasure::now()
 #define COPYD2H(NAME) cl::copy(queue, b##NAME,  p##NAME.w_ptr(),  p##NAME.end());
 #define COPYH2D(NAME) cl::copy(queue, p##NAME.r_ptr(),  p##NAME.end(), b##NAME);
 
+
+
 //some usefull link about __local memory: https://stackoverflow.com/questions/38345046/local-memory-using-c-wrappers
-void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const float alpha_s, const float fore_th, cv::Mat &gray, cv::Mat& angle, cv::Mat& mapR)
+void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const float alpha_s, const float fore_th, cv::Mat &gray, cv::Mat& angle, cv::Mat& mapR, cv::Mat& canny)
 {
+
+    const auto elems_size       = gray.rows * gray.cols;
+    const auto sobel_elems_size = (gray.rows + 2) * (gray.cols + 32);
+
+    //GPU only buffers
+    static cl::Buffer bbx (CL_MEM_READ_WRITE, elems_size * sizeof(float));
+    static cl::Buffer bby (CL_MEM_READ_WRITE, elems_size * sizeof(float));
+    static cl::Buffer bga (CL_MEM_READ_WRITE, sobel_elems_size * sizeof(float)); //temporary gradient vectors, aligned
+    static cl::Buffer bgm (CL_MEM_READ_WRITE, sobel_elems_size * sizeof(float)); //temporary gradient magnitudes, aligned
+    static cl::Buffer bN  (CL_MEM_READ_WRITE, sobel_elems_size * sizeof(float)); //temporary non-maximum supression
 
     VARS(angle, float);
     VARS(mapR,  uint8_t);
-
+    VARS(canny, uint8_t);
     static cv::Mat gray_buf(gray.rows + 2, gray.cols + 32, gray.depth());
     cv::copyMakeBorder(gray, gray_buf, 1, 1, 16, 16, cv::BORDER_REPLICATE);
 
@@ -362,34 +535,34 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
     pgray.assign(gray_buf, 0);
 
 
-
-    static cv::Mat abx;
-    static cv::Mat aby;
-    static MatProxy<float> pbx(abx, gray.rows, gray.cols, 1);
-    static MatProxy<float> pby(aby, gray.rows, gray.cols, 1);
-
     static cl::Buffer bgray (queue, pgray.w_ptr(),    pgray.end(),  true, false);
     static cl::Buffer bangle(queue, pangle.w_ptr(),   pangle.end(), false, false);
-    static cl::Buffer bbx   (queue, pbx.w_ptr(),   pbx.end(),  false, false);
-    static cl::Buffer bby   (queue, pby.w_ptr(),   pby.end(),  false, false);
-    static cl::Buffer bmapR (queue, pmapR.w_ptr(),  pmapR.end(), false, false);
-
+    static cl::Buffer bmapR (queue, pmapR.w_ptr(),    pmapR.end(), false, false);
+    static cl::Buffer bcanny(queue, pcanny.w_ptr(),   pcanny.end(), false, false);
 
     static auto gpus = gpuUsed;
     //std::cout << "Gpus used for sobel: " << gpus << std::endl;
     //std::cout << ((size_t)pangle.w_ptr()) << "   " << ((size_t)pmapR.w_ptr()) << std::endl;
     try
     {
-        auto kernel = cl::KernelFunctor<int, int, int, float, float, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&> (Kernels, "SobelAndMagicDetector");
+        auto kernel = cl::KernelFunctor<int, int, int, float, float,
+             cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&,
+             cl::Buffer&, cl::Buffer&> (Kernels, "SobelAndMagicDetector");
+
+        auto kernel_canny = cl::KernelFunctor<cl::Buffer&, cl::Buffer&, cl::Buffer&> (Kernels, "Canny");
+        auto kernel_hyst  = cl::KernelFunctor<cl::Buffer&, cl::Buffer&, cl::Buffer&> (Kernels, "hysterisis");
         COPYH2D(gray);
         COPYH2D(mapR);
-
-
-        while (true)
+        COPYH2D(canny);
+        for (const int kw = gray.cols / 16, kh = gray.rows / 16; true;)
             try
             {
-                kernel(cl::EnqueueArgs(queue, cl::NDRange(gray.cols / 16, gray.rows / 16), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s,
-                       fore_th, bgray, bangle, bbx, bby, bmapR).wait();
+                kernel(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s,
+                       fore_th, bgray, bangle, bbx, bby, bmapR, bga, bgm).wait();
+
+                //Canny using precalculated values by prior kernel
+                kernel_canny(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bga, bgm, bN).wait();
+                kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bga, bN, bcanny).wait();
                 break;
             }
             catch (cl::Error& err)
@@ -402,11 +575,13 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
                 throw err;
             }
         COPYD2H(angle);
+        COPYD2H(canny);
         if (is_plus2 || is_minus1)
             COPYD2H(mapR);
     }
     CATCHCL
     pangle.updateMatrixIfNeeded();
+    pcanny.updateMatrixIfNeeded();
 
     if (is_plus2 || is_minus1)
         pmapR.updateMatrixIfNeeded();
