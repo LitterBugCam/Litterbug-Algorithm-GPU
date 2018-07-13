@@ -73,8 +73,8 @@ cl::Program getCompiledKernels()
                                              {
                                                float16 t0, t1, t2, t3, t4;
 
-                                               t3 = myfabs(x);
-                                               t1 = myfabs(y);
+                                               t3 = fabs(x);
+                                               t1 = fabs(y);
                                                t0 = max(t3, t1);
                                                t1 = min(t3, t1);
                                                t3 = 1.f / t0;
@@ -132,10 +132,6 @@ cl::Program getCompiledKernels()
         //https://software.intel.com/en-us/videos/optimizing-simple-opencl-kernels-sobel-kernel-optimization
 
         R"CLC(
-
-        //bugfix for rpi
-        //#define fabs myfabs
-
 
         #define INP_MEM __global const
         //#define NORM /255.f
