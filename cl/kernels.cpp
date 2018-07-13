@@ -259,7 +259,7 @@ cl::Program getCompiledKernels()
         //that is not full Canny, it uses pre-processed values from prior SobelAndMagicDetector
         //expecting angle is specially prepared in [0;pi) so we lost left or right, top or bottom, but we don't care here
         #define INPUT (( INP_MEM float*)(alignedGMod + srcIndex))
-       __kernel void non_maximum(INP_MEM float16* restrict angles, INP_MEM float16* restrict alignedGMod, __global float16* N)
+       __kernel void non_maximum(INP_MEM float16* restrict angles, INP_MEM float16* restrict alignedGMod, __global float16* restrict N)
         {
               const float16 pi8 = 0.39269908125f; //pi/8 (half width of interval around gradient ray)
               const float16 pi4 = 0.7853981625f;
@@ -328,7 +328,7 @@ cl::Program getCompiledKernels()
 
         //that will be 1 pass for speed
         #define INPUT   (( INP_MEM float*)(paddedN + srcIndex))
-        __kernel void hysterisis(INP_MEM float16* restrict paddedN,  __global uchar16* result)
+        __kernel void hysterisis(INP_MEM float16* restrict paddedN,  __global uchar16* restrict result)
         {
              const float16 T1 = 40.f NORM;
              const float16 T2 = 3.f * T1 NORM;
