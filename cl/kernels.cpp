@@ -32,7 +32,7 @@ cl::Program getCompiledKernels()
                                              {
                                                  //we have -1 = true in condition ...it should be so
                                                  float16 cond = convert_float16(condition * condition);
-                                                 float16 not_cond = convert_float16(1 - condition * condition);
+                                                 float16 not_cond = 1.f - cond;//convert_float16(1 - condition * condition);
                                                  return atrue * cond + afalse * not_cond;
                                              }
 
