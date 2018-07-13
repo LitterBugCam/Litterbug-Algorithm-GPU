@@ -142,15 +142,15 @@ cl::Program getCompiledKernels()
         //z4 z5 z6
         //z7 z8 z9
 
-        #define Z1 ((float16)(a, b.s0123, b.s456789ab, b.scde))
-        #define Z2 (b)
-        #define Z3 ((float16) (b.s123, b.s4567, b.s89abcdef, c))
-        #define Z4 ((float16)(d, e.s0123, e.s456789ab, e.scde))
-        #define Z5 (e)
-        #define Z6 ((float16)(e.s123, e.s4567, e.s89abcdef, f))
-        #define Z7 ((float16)(g, h.s0123, h.s456789ab, h.scde))
-        #define Z8 (h)
-        #define Z9 ((float16)(h.s123, h.s4567, h.s89abcdef, i))
+        #define Z1 (float16)(a, b.s0123, b.s456789ab, b.scde)
+        #define Z2 b
+        #define Z3 (float16) (b.s123, b.s4567, b.s89abcdef, c)
+        #define Z4 (float16)(d, e.s0123, e.s456789ab, e.scde)
+        #define Z5 e
+        #define Z6 (float16)(e.s123, e.s4567, e.s89abcdef, f)
+        #define Z7 (float16)(g, h.s0123, h.s456789ab, h.scde)
+        #define Z8 h
+        #define Z9 (float16)(h.s123, h.s4567, h.s89abcdef, i)
 
         #define INIT_PADDED uint dstXStride = get_global_size(0); uint dstIndex = 16 * get_global_id(1) * dstXStride + get_global_id(0);uint srcXStride = dstXStride + 2;uint srcIndex = 16 * get_global_id(1) * srcXStride + get_global_id(0) + 1
         #define NEXT_ROW a = d; b = e; c = f; d = g; e = h; f = i
