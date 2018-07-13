@@ -297,22 +297,22 @@ cl::Program getCompiledKernels()
                   float16 p2 = 0;
                   int16   atest = 0;
 
-                  atest =  islessequal(angle, pi8);
+
+                  atest =  islessequal(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
                   p1 = myselectf16(p1, Z4, atest);
                   p2 = myselectf16(p2, Z6, atest);
 
-                  atest =  isless(fabs(angle - pi4), pi8);
+                  atest =  isless(fabs(angle - pi4), pi8); //45
                   p1 = myselectf16(p1, Z3, atest);
                   p2 = myselectf16(p2, Z7, atest);
 
-                  atest =  islessequal(fabs(angle - pi2), pi8);
+                  atest =  islessequal(angle, pi8); //0
                   p1 = myselectf16(p1, Z2, atest);
                   p2 = myselectf16(p2, Z8, atest);
 
-                  atest =  isless(pi34, angle);
+                  atest =  isless(pi34, angle); //135
                   p1 = myselectf16(p1, Z1, atest);
                   p2 = myselectf16(p2, Z9, atest);
-
 
                   float16 n = myselectf16(0, Z5, isless(p2, Z5) && isless(p1, Z5));
 
@@ -327,7 +327,7 @@ cl::Program getCompiledKernels()
         #define INPUT   (( __global float*)(paddedN + srcIndex))
         __kernel void hysterisis(__global int* had_change, __global float16* restrict paddedN, __global float16* restrict paddedN2, __global uchar16* result)
         {
-             const float16 T1 = 30.f NORM;
+             const float16 T1 = 40.f NORM;
              const float16 T2 = 3.f * T1 NORM;
 
              INIT_PADDED;
@@ -368,8 +368,8 @@ cl::Program getCompiledKernels()
                  float16 nz5 = myselectf16(myselectf16(0, Z5, PE), T2 + 1,  surrounding_greater && PE);
 
                  changes += any(isnotequal(Z5, nz5));
-
                  vstore16(nz5, 0, (( __global float*)(paddedN2 + dstPaddedIndex)));
+
                  uchar16 hys = myselectuc16(0, 255, isgreaterequal(nz5, T2));
                  //uchar16 hys = convert_uchar16(Z5 DENORM); //just copy output of prev kernel
 
@@ -380,7 +380,7 @@ cl::Program getCompiledKernels()
                  NEXT_ROW;
                  dstIndex += dstXStride;
              }
-             //if (*had_change == 0) atomic_add(had_change, changes);
+            // if (*had_change == 0) atomic_add(had_change, changes);
         };
         #undef INPUT
         #undef OUTPUT
