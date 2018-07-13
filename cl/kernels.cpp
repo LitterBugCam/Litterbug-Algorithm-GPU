@@ -280,7 +280,7 @@ cl::Program getCompiledKernels()
               for (int k = 0; k < 16; ++k)
               {
                   uint dstPaddedIndex = srcIndex;
-                  float16 angle = convert_float16(vload16(0, ( INP_MEM float*)(angles + dstIndex)));
+                  float16 angle = vload16(0, ( INP_MEM float*)(angles + dstIndex));
                   angle = myselectf16(angle, angle - pi1, isgreater(angle, pi1));
                   srcIndex += srcXStride;
 
@@ -557,7 +557,7 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
                    fore_th, bgray, bangle, bbx, bby, bmapR, bgm).wait();
 
             //Canny using precalculated values by prior kernel
-            //kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
+            kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
             //kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
 
             break;
