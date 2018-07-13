@@ -298,9 +298,9 @@ cl::Program getCompiledKernels()
                   int16   atest = 0;
 
 
-//                  atest =  isless(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
-//                  p1 = myselectf16(p1, Z4, atest);
-//                  p2 = myselectf16(p2, Z6, atest);
+                  atest =  isless(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
+                  p1 = myselectf16(p1, Z4, atest);
+                  p2 = myselectf16(p2, Z6, atest);
 
 //                  atest =  isless(fabs(angle - pi4), pi8); //45
 //                  p1 = myselectf16(p1, Z3, atest);
