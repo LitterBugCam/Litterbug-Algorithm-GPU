@@ -274,27 +274,24 @@ cl::Program getCompiledKernels()
                   float16 p2 = 0;
                   int16   atest = 0;
 
-                  float16 delta = fabs(angle - pi2);
 
-                  atest =  isless(delta, pi8); //90 not sure why, but this works better 90 = up/left
-                  p1 = myselectf16(p1, Z4, atest);
-                  p2 = myselectf16(p2, Z6, atest);
-
-                  delta = fabs(angle - pi4);
-                  atest =  isless(delta, pi8); //45
-                  p1 = myselectf16(p1, Z3, atest);
-                  p2 = myselectf16(p2, Z7, atest);
-
-                  delta = fabs(angle - pi1);
-                  atest =  isless(angle, pi8) || isless(delta, pi8); //0
-                  p1 = myselectf16(p1, Z2, atest);
-                  p2 = myselectf16(p2, Z8, atest);
+                  atest =  isless(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
+//                  p1 = myselectf16(p1, Z4, atest);
+//                  p2 = myselectf16(p2, Z6, atest);
 
 
-                  delta = fabs(angle - pi34);
-                  atest =  isless(delta, pi8); //135
-                  p1 = myselectf16(p1, Z1, atest);
-                  p2 = myselectf16(p2, Z9, atest);
+                  atest =  isless(fabs(angle - pi4), pi8); //45
+//                  p1 = myselectf16(p1, Z3, atest);
+//                  p2 = myselectf16(p2, Z7, atest);
+
+
+                  atest =  isless(angle, pi8) || isless(fabs(angle - pi1), pi8); //0
+//                  p1 = myselectf16(p1, Z2, atest);
+//                  p2 = myselectf16(p2, Z8, atest);
+
+                  atest =  isless(fabs(angle - pi34), pi8); //135
+//                  p1 = myselectf16(p1, Z1, atest);
+//                  p2 = myselectf16(p2, Z9, atest);
 
                   float16 n = myselectf16(0, Z5, isless(p2, Z5) && isless(p1, Z5));
 
