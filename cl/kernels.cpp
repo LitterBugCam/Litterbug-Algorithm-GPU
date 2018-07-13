@@ -142,15 +142,15 @@ cl::Program getCompiledKernels()
         //z4 z5 z6
         //z7 z8 z9
 
-        #define Z1 (float16)(a, b.s0123, b.s456789ab, b.scde)
-        #define Z2 b
-        #define Z3 (float16) (b.s123, b.s4567, b.s89abcdef, c)
-        #define Z4 (float16)(d, e.s0123, e.s456789ab, e.scde)
-        #define Z5 e
-        #define Z6 (float16)(e.s123, e.s4567, e.s89abcdef, f)
-        #define Z7 (float16)(g, h.s0123, h.s456789ab, h.scde)
-        #define Z8 h
-        #define Z9 (float16)(h.s123, h.s4567, h.s89abcdef, i)
+        #define Z1 ((float16)(a, b.s0123, b.s456789ab, b.scde))
+        #define Z2 (b)
+        #define Z3 ((float16) (b.s123, b.s4567, b.s89abcdef, c))
+        #define Z4 ((float16)(d, e.s0123, e.s456789ab, e.scde))
+        #define Z5 (e)
+        #define Z6 ((float16)(e.s123, e.s4567, e.s89abcdef, f))
+        #define Z7 ((float16)(g, h.s0123, h.s456789ab, h.scde))
+        #define Z8 (h)
+        #define Z9 ((float16)(h.s123, h.s4567, h.s89abcdef, i))
 
         #define INIT_PADDED uint dstXStride = get_global_size(0); uint dstIndex = 16 * get_global_id(1) * dstXStride + get_global_id(0);uint srcXStride = dstXStride + 2;uint srcIndex = 16 * get_global_id(1) * srcXStride + get_global_id(0) + 1
         #define NEXT_ROW a = d; b = e; c = f; d = g; e = h; f = i
@@ -237,7 +237,7 @@ cl::Program getCompiledKernels()
         //expecting angle is specially prepared in [0;pi) so we lost left or right, top or bottom, but we don't care here
         #define INPUT2 (( INP_MEM float*)(alignedGMod + srcIndex))
 
-        #define TMP(ZV1,ZV2) tmp = myselectf16(p1, ZV1, atest); p1 = tmp; tmp = myselectf16(p2, ZV2, atest); p2 = tmp
+        #define TMP(ZV1,ZV2, ANG) p1 = select(p1, ZV1, isless(fabs(angle - ANG), pi8)); p2 = select(p2, ZV2, isless(fabs(angle - ANG), pi8))
        __kernel void non_maximum(INP_MEM float16* restrict angles, INP_MEM float16* restrict alignedGMod, __global float16* restrict N)
         {
               float16 pi8 = 0.39269908125f; //pi/8 (half width of interval around gradient ray)
@@ -274,20 +274,12 @@ cl::Program getCompiledKernels()
                   //need to figure gradient line and pick 2 of 8 around current
                   float16 p1 = 0;
                   float16 p2 = 0;
-                  int16   atest = 0;
-                  float16 tmp;
 
-                  atest =  isless(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
-                  TMP(Z4, Z6);
-
-                  atest =  isless(fabs(angle - pi4), pi8); //45
-                  TMP(Z3, Z7);
-
-                  atest =  isless(angle, pi8) || isless(fabs(angle - pi1), pi8); //0
-                  TMP(Z2, Z8);
-
-                  atest =  isless(fabs(angle - pi34), pi8); //135
-                  TMP(Z1, Z9);
+                  TMP(Z4, Z6, pi2);
+                  TMP(Z3, Z7, pi4);
+                  TMP(Z2, Z8, 0);
+                  TMP(Z2, Z8, pi1);
+                  TMP(Z1, Z9, pi34);
 
                   float16 n = myselectf16(0, Z5, isless(p2, Z5) && isless(p1, Z5));
 
@@ -526,7 +518,7 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
         COPYH2D(canny);
         const int kw = gray.cols / 16;
         const int kh = gray.rows / 16;
-        kernel(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s, fore_th, bgray, bangle, bbx, bby, bmapR, bgm).wait();
+        //kernel(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s, fore_th, bgray, bangle, bbx, bby, bmapR, bgm).wait();
 
         //Canny using precalculated values by prior kernel
         kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
