@@ -157,18 +157,34 @@ cl::Program getCompiledKernels()
 
         R"CLC(
         #define INP_MEM __global const
+
+
+        //z1 z2 z3
+        //z4 z5 z6
+        //z7 z8 z9
+
+        #define Z1 ((float16)(a, b.s0123, b.s456789ab, b.scde))
+        #define Z2 (b)
+        #define Z3 (float16) (b.s123, b.s4567, b.s89abcdef, c)
+        #define Z4 ((float16)(d, e.s0123, e.s456789ab, e.scde))
+        #define Z5 (e)
+        #define Z6 (float16)(e.s123, e.s4567, e.s89abcdef, f)
+        #define Z7 (float16)(g, h.s0123, h.s456789ab, h.scde)
+        #define Z8 (h)
+        #define Z9 (float16)(h.s123, h.s4567, h.s89abcdef, i)
+
+        #define INIT_PADDED uint dstXStride = get_global_size(0); uint dstIndex = 16 * get_global_id(1) * dstXStride + get_global_id(0);uint srcXStride = dstXStride + 2;uint srcIndex = 16 * get_global_id(1) * srcXStride + get_global_id(0) + 1
+        #define NEXT_ROW a = d; b = e; c = f; d = g; e = h; f = i
+
+        #define INPUT (( INP_MEM uchar*)(input + srcIndex))
         __kernel void SobelAndMagicDetector(const int is_minus1, const int is_plus2, const int is_first_run, const float alpha_s, const float fore_th,
                                             INP_MEM uchar16* restrict input, __global float16* restrict grad_dir,
                                             __global float16* restrict BSx,  __global float16* restrict BSy, __global uchar16* restrict mapRes
                                             ,__global float16* restrict alignedGAngle, __global float16* restrict alignedGMod
                                            )
         {
-            uint dstXStride = get_global_size(0); //original width / 16
-            uint dstIndex   = 16 * get_global_id(1) * dstXStride + get_global_id(0);
-            uint srcXStride = dstXStride + 2;
-            uint srcIndex   = 16 * get_global_id(1) * srcXStride + get_global_id(0) + 1;
-
-            const float16 as = alpha_s;
+            INIT_PADDED;
+            const float16 as  = alpha_s;
             const float16 fth = fore_th;
             const float16 v19 = 19;
             const int16 zeros = 0;
@@ -176,73 +192,70 @@ cl::Program getCompiledKernels()
             const int16 twos  = 2;
             const int16 twos5 = 255;
 
-            float   a = (( INP_MEM uchar*)(input + srcIndex))[-1];
-            float16 b = convert_float16(vload16(0, ( INP_MEM uchar*)(input + srcIndex)));
-            float   c = (( INP_MEM uchar*)(input + srcIndex))[16];
+            float   a = INPUT[-1] / 255.f;
+            float16 b = convert_float16(vload16(0, INPUT)) / 255.f;
+            float   c = INPUT[16] / 255.f;
             srcIndex += srcXStride;
 
-            float   d = (( INP_MEM uchar*)(input + srcIndex))[-1];
-            float16 e = convert_float16(vload16(0, ( INP_MEM uchar*)(input + srcIndex)));
-            float   f = (( INP_MEM uchar*)(input + srcIndex))[16];
+            float   d = INPUT[-1] / 255.f;
+            float16 e = convert_float16(vload16(0, INPUT)) / 255.f;
+            float   f = INPUT[16] / 255.f;
 
             for (int k = 0; k < 16; ++k)
             {
-            uint dstAlignedIndex = srcIndex; //ok, I hope that is correct, i.e. middle of the matrix is index
+                uint dstAlignedIndex = srcIndex; //ok, I hope that is correct, i.e. middle of the matrix is index
+                srcIndex += srcXStride;
+                float   g = INPUT[-1] / 255.f;
+                float16 h = convert_float16(vload16(0, INPUT)) / 255.f;
+                float   i = INPUT[16] / 255.f;
 
-            srcIndex += srcXStride;
-            float   g = (( INP_MEM uchar*)(input + srcIndex))[-1];
-            float16 h = convert_float16(vload16(0, (INP_MEM uchar*)(input + srcIndex)));
-            float   i = (( INP_MEM uchar*)(input + srcIndex))[16];
+                float16 Gx = (Z7 + 2 * Z8 + Z9) - (Z1 + 2 * Z2 +Z3);
+                float16 Gy = (Z3 + 2 * Z6 + Z9) - (Z1 + 2 * Z4 +Z7);
+                float16 an  = myatan2f16(Gy, Gx);
 
-            float16 Gx =  (float16)    (a, b.s0123, b.s456789ab, b.scde) -     (float16)(b.s123, b.s4567, b.s89abcdef, c) +
-                        2.f * (float16)(d, e.s0123, e.s456789ab, e.scde) - 2.f * (float16)(e.s123, e.s4567, e.s89abcdef, f) +
-                        (float16)    (g, h.s0123, h.s456789ab, h.scde) -     (float16)(h.s123, h.s4567, h.s89abcdef, i);
+                //prepairing stuff for Canny - result will be gradient with [0; pi) - we dont care if it poinst left or right there
+                     float16 mag = sqrt(Gx * Gx + Gy * Gy); //maybe not working on PI
 
-            float16 Gy =  (float16)(a, b.s0123, b.s456789ab, b.scde) + 2.f * b + (float16)(b.s123, b.s4567, b.s89abcdef, c) -
-                        (float16)(g, h.s0123, h.s456789ab, h.scde) - 2.f * h - (float16)(h.s123, h.s4567, h.s89abcdef, i);
+                     vstore16(myselectf16(an, an + 3.14159265f, isless(an, 0)), 0, ( __global float*)(alignedGAngle + dstAlignedIndex));
+                     vstore16(mag, 0, ( __global float*)(alignedGMod + dstAlignedIndex));
+                //done here, must know full matrix prior can do non-maximum supression etc.
 
-            float16 an = myatan2f16(Gy, Gx);
+                an = myselectf16(an, an + 6.2831853f, isless(an, 0));
+                vstore16(an, 0, ( __global float*)(grad_dir + dstIndex));
+                NEXT_ROW;
 
 
-            //prepairing stuff for Canny - result will be gradient with [0; pi) - we dont care if it poinst left or right there
-            vstore16(myselectf16(an, an + 3.14159265f, isless(an, 0)), 0, ( __global float*)(alignedGAngle + dstAlignedIndex));
-            vstore16(fabs(Gx) + fabs(Gy), 0, ( __global float*)(alignedGMod + dstAlignedIndex)); //instead sqrt
-            //vstore16(sqrt(Gx * Gx + Gy * Gy), 0, ( __global float*)(alignedGMod + dstAlignedIndex)); //maybe not working on PI
-            //done here, must know full matrix prior can do non-maximum supression etc.
+                float16 bx = myselectf16(vload16(0, ( __global float*)(BSx + dstIndex)), Gx, is_first_run);
+                float16 by = myselectf16(vload16(0, ( __global float*)(BSy + dstIndex)), Gy, is_first_run);
 
-            an = myselectf16(an, an + 6.2831853f, isless(an, 0));
-            vstore16(an, 0, ( __global float*)(grad_dir + dstIndex));
-            a = d; b = e; c = f;
-            d = g; e = h; f = i;
+                float16 D_Sx = Gx - bx;
+                bx += D_Sx * as;
+                vstore16(bx, 0, ( __global float*)(BSx + dstIndex));
 
-            float16 bx = myselectf16(vload16(0, ( __global float*)(BSx + dstIndex)), Gx, is_first_run);
-            float16 by = myselectf16(vload16(0, ( __global float*)(BSy + dstIndex)), Gy, is_first_run);
+                float16 D_Sy = Gy - by;
+                by += D_Sy * as;
+                vstore16(by, 0, ( __global float*)(BSy + dstIndex));
 
-            float16 D_Sx = Gx - bx;
-            bx += D_Sx * as;
-            vstore16(bx, 0, ( __global float*)(BSx + dstIndex));
+                int16 mr           = ((is_minus1 || is_plus2)) ? convert_int16(vload16(0, ( __global uchar*)(mapRes + dstIndex))) : 0;
+                mr -= is_minus1;
+                int16 c1 = isgreater(fabs(D_Sx), fth) && isgreater(fabs(Gx), v19);
+                int16 c2 = isgreater(fabs(D_Sy), fth) && isgreater(fabs(Gy), v19);
 
-            float16 D_Sy = Gy - by;
-            by += D_Sy * as;
-            vstore16(by, 0, ( __global float*)(BSy + dstIndex));
-
-            int16 mr           = ((is_minus1 || is_plus2)) ? convert_int16(vload16(0, ( __global uchar*)(mapRes + dstIndex))) : 0;
-            mr -= is_minus1;
-            int16 c1 = isgreater(fabs(D_Sx), fth) && isgreater(fabs(Gx), v19);
-            int16 c2 = isgreater(fabs(D_Sy), fth) && isgreater(fabs(Gy), v19);
-
-            mr += myselecti16(zeros, ones, c2 || c1) * twos;
-            c1 = mr < zeros;
-            c2 = myselecti16(mr, zeros, c1);//overflow protection
-            c1 = c2 > twos5;
-            mr = is_plus2 * myselecti16(c2, twos5, c1); //overflow protection
-            if (is_minus1 || is_plus2)
-               vstore16(convert_uchar16(mr), 0, ( __global uchar*)(mapRes + dstIndex));
-            dstIndex += dstXStride;
+                mr += myselecti16(zeros, ones, c2 || c1) * twos;
+                c1 = mr < zeros;
+                c2 = myselecti16(mr, zeros, c1);//overflow protection
+                c1 = c2 > twos5;
+                mr = is_plus2 * myselecti16(c2, twos5, c1); //overflow protection
+                if (is_minus1 || is_plus2)
+                   vstore16(convert_uchar16(mr), 0, ( __global uchar*)(mapRes + dstIndex));
+                dstIndex += dstXStride;
             }
        }
+       #undef INPUT
+
         //that is not full Canny, it uses pre-processed values from prior SobelAndMagicDetector
         //expecting angle is specially prepared in [0;pi) so we lost left or right, top or bottom, but we don't care here
+        #define INPUT (( INP_MEM float*)(alignedGMod + srcIndex))
        __kernel void Canny(INP_MEM float16* restrict alignedGAngle, INP_MEM float16* restrict alignedGMod, __global float16* N)
         {
               const float16 pi8 = 0.39269908125f; //pi/8 (half width of interval around gradient ray)
@@ -251,29 +264,26 @@ cl::Program getCompiledKernels()
               const float16 pi2 = 1.570796325f;
               const float16 pi1 = 3.14159265f;
 
-              uint dstXStride = get_global_size(0); //original width / 16
-              uint dstIndex   = 16 * get_global_id(1) * dstXStride + get_global_id(0);
-              uint srcXStride = dstXStride + 2;
-              uint srcIndex   = 16 * get_global_id(1) * srcXStride + get_global_id(0) + 1;
-
-
-              float   a = (( INP_MEM float*)(alignedGMod + srcIndex))[-1];//-1; -1 corner
-              float16 b = convert_float16(vload16(0, ( INP_MEM float*)(alignedGMod + srcIndex)));
-              float   c = (( INP_MEM float*)(alignedGMod + srcIndex))[16];
+              INIT_PADDED;
+              float   a = INPUT[-1];
+              float16 b = vload16(0, INPUT);
+              float   c = INPUT[16];
               srcIndex += srcXStride;
 
-              float   d = (( INP_MEM float*)(alignedGMod + srcIndex))[-1]; //-1;0
-              float16 e = convert_float16(vload16(0, ( INP_MEM float*)(alignedGMod + srcIndex)));
-              float   f = (( INP_MEM float*)(alignedGMod + srcIndex))[16];
+              float   d = INPUT[-1];
+              float16 e = vload16(0, INPUT);
+              float   f = INPUT[16];
+
 
               for (int k = 0; k < 16; ++k)
               {
                   uint dstPaddedIndex = srcIndex;
                   float16 angle = convert_float16(vload16(0, ( INP_MEM float*)(alignedGAngle + srcIndex)));
                   srcIndex += srcXStride;
-                  float   g = (( INP_MEM float*)(alignedGMod + srcIndex))[-1];
-                  float16 h = convert_float16(vload16(0, (INP_MEM float*)(alignedGMod + srcIndex)));
-                  float   i = (( INP_MEM float*)(alignedGMod + srcIndex))[16];//+1; +1 corner
+
+                  float   g = INPUT[-1];
+                  float16 h = vload16(0, INPUT);
+                  float   i = INPUT[16];
 
                   //now we have loaded all 9 points (3x3) and x16 of them
                   //need to figure gradient line and pick 2 of 8 around current
@@ -283,33 +293,34 @@ cl::Program getCompiledKernels()
 
                   //pi/4 = 45 degree ... not sure though, in C++ examples it's weird direction, I assume 45 vector points to x + 1 and y - 1
                   atest =  isless(fabs(angle-pi4), pi8);
-                  p1 = myselectf16(p1,(float16)(b.s123, b.s4567, b.s89abcdef, c), atest);
-                  p2 = myselectf16(p2,(float16)(g, h.s0123, h.s456789ab, h.scde), atest);
+                  p1 = myselectf16(p1, Z3, atest);
+                  p2 = myselectf16(p2, Z7, atest);
 
                   //possibly should switch p4 and p34 - that means 0 is at left
                   atest =  isless(fabs(angle-pi34), pi8);
-                  p1 = myselectf16(p1,(float16)(a, b.s0123, b.s456789ab, b.scde), atest);
-                  p2 = myselectf16(p2,(float16)(h.s123, h.s4567, h.s89abcdef, i), atest);
+                  p1 = myselectf16(p1, Z1, atest);
+                  p2 = myselectf16(p2, Z9, atest);
 
                   atest =  isless(fabs(angle-pi2), pi8);
-                  p1 = myselectf16(p1, b, atest);
-                  p2 = myselectf16(p2, h, atest);
+                  p1 = myselectf16(p1, Z2, atest);
+                  p2 = myselectf16(p2, Z8, atest);
 
                   atest =  isless(fabs(angle), pi8);
-                  p1 = myselectf16(p1, (float16)(d, e.s0123, e.s456789ab, e.scde), atest);
-                  p2 = myselectf16(p2, (float16)(e.s123, e.s4567, e.s89abcdef, f), atest);
+                  p1 = myselectf16(p1, Z4, atest);
+                  p2 = myselectf16(p2, Z6, atest);
 
-                  vstore16(e, 0, ( __global float*)(N + dstPaddedIndex));//DELETE IT, UNCOMMENT BELOW
 
-                  float16 n = myselectf16(0, e, isless(p2, e) && isless(p1, e)); //not sure maybe isless(e, p1) and even swap p1/p2 ... diff articles show different
-                  a = d; b = e; c = f;
-                  d = g; e = h; f = i;
-                  //okey n now is non-maximum supressed 16 points at once...should I store or can use right now...lets try to figure
-                  //If the pixel gradient is between the two thresholds, then it will be accepted only if it is connected to a pixel that is above the upper threshold.
-                  //so this means we must store full picture (padded with extra pixels again!)...and run through it again
-                  //vstore16(n, 0, ( __global float*)(N + dstPaddedIndex));
+                  float16 n = myselectf16(0, Z5, isless(p2, Z5) && isless(p1, Z5)); //not sure maybe isless(e, p1) and even swap p1/p2 ... diff articles show different
+
+                  //vstore16(Z5, 0, ( __global float*)(N + dstPaddedIndex));//DELETE IT, UNCOMMENT BELOW (it just copies magnitude to output - for testing)
+                  vstore16(n, 0, ( __global float*)(N + dstPaddedIndex));
+                  NEXT_ROW;
               }
         };
+        #undef INPUT
+
+
+        #define INPUT (( INP_MEM float*)(paddedN + srcIndex))
         __kernel void hysterisis(INP_MEM float16* restrict alignedGAngle, INP_MEM float16* restrict paddedN, __global uchar16* result)
         {
              const float16 pi8 = 0.39269908125f; //pi/8 (half width of interval around gradient ray)
@@ -320,49 +331,47 @@ cl::Program getCompiledKernels()
 
              const float16 T1  = 30.f; //treshholds, from original cpp file for hysterisis
              const float16 T2  = 90.f;
-             uint dstXStride = get_global_size(0); //original width / 16
-             uint dstIndex   = 16 * get_global_id(1) * dstXStride + get_global_id(0);
-             uint srcXStride = dstXStride + 2;
-             uint srcIndex   = 16 * get_global_id(1) * srcXStride + get_global_id(0) + 1;
 
-             float   a = (( INP_MEM float*)(paddedN + srcIndex))[-1];//-1; -1 corner
-             float16 b = convert_float16(vload16(0, ( INP_MEM float*)(paddedN + srcIndex)));
-             float   c = (( INP_MEM float*)(paddedN + srcIndex))[16];
+             INIT_PADDED;
+             float   a = INPUT[-1];
+             float16 b = vload16(0, INPUT);
+             float   c = INPUT[16];
              srcIndex += srcXStride;
 
-             float   d = (( INP_MEM float*)(paddedN + srcIndex))[-1]; //-1;0
-             float16 e = convert_float16(vload16(0, ( INP_MEM float*)(paddedN + srcIndex)));
-             float   f = (( INP_MEM float*)(paddedN + srcIndex))[16];
+             float   d = INPUT[-1];
+             float16 e = vload16(0, INPUT);
+             float   f = INPUT[16];
 
              for (int k = 0; k < 16; ++k)
              {
                  srcIndex += srcXStride;
                  float16 angle = convert_float16(vload16(0, ( INP_MEM float*)(alignedGAngle + srcIndex)));
 
-                 float   g = (( INP_MEM float*)(paddedN + srcIndex))[-1];
-                 float16 h = convert_float16(vload16(0, (INP_MEM float*)(paddedN + srcIndex)));
-                 float   i = (( INP_MEM float*)(paddedN + srcIndex))[16];//+1; +1 corner
+                 float   g = INPUT[-1];
+                 float16 h = vload16(0, INPUT);
+                 float   i = INPUT[16];
+
 
                  float16 p1 = 0;
                  float16 p2 = 0;
                  int16   atest = 0;
 
                  atest =  isless(fabs(angle-pi4), pi8);
-                 p1 = myselectf16(p1,(float16)(b.s123, b.s4567, b.s89abcdef, c), atest);
-                 p2 = myselectf16(p2,(float16)(g, h.s0123, h.s456789ab, h.scde), atest);
+                 p1 = myselectf16(p1, Z3, atest);
+                 p2 = myselectf16(p2, Z7, atest);
 
                 //possibly should switch p4 and p34 - that means 0 is at left
                  atest =  isless(fabs(angle-pi34), pi8);
-                 p1 = myselectf16(p1,(float16)(a, b.s0123, b.s456789ab, b.scde), atest);
-                 p2 = myselectf16(p2,(float16)(h.s123, h.s4567, h.s89abcdef, i), atest);
+                 p1 = myselectf16(p1, Z1, atest);
+                 p2 = myselectf16(p2, Z9, atest);
 
                  atest =  isless(fabs(angle-pi2), pi8);
-                 p1 = myselectf16(p1, b, atest);
-                 p2 = myselectf16(p2, h, atest);
+                 p1 = myselectf16(p1, Z2, atest);
+                 p2 = myselectf16(p2, Z8, atest);
 
                  atest =  isless(fabs(angle), pi8);
-                 p1 = myselectf16(p1, (float16)(d, e.s0123, e.s456789ab, e.scde), atest);
-                 p2 = myselectf16(p2, (float16)(e.s123, e.s4567, e.s89abcdef, f), atest);
+                 p1 = myselectf16(p1, Z4, atest);
+                 p2 = myselectf16(p2, Z6, atest);
                  //If the pixel gradient is between the two thresholds, then it will be accepted only if it is connected to a pixel that is above the upper threshold.
                  int16 surrounding_greater = 0;
 
@@ -374,15 +383,22 @@ cl::Program getCompiledKernels()
 //                 surrounding_greater = surrounding_greater || isgreater((float16)(h.s123, h.s4567, h.s89abcdef, i), T2);
 //                 surrounding_greater = surrounding_greater || isgreater(b, T2);
 //                 surrounding_greater = surrounding_greater || isgreater(h, T2);
+
                  surrounding_greater = surrounding_greater || isgreater(p1, T2) || isgreater(p2, T2); //in gradient direction
+
                  surrounding_greater = surrounding_greater || isgreater(e, T2);//If a pixel gradient is higher than the upper threshold, the pixel is accepted as an edge
                  surrounding_greater = surrounding_greater && isgreater(e, T1);//If a pixel gradient value is below the lower threshold, then it is rejected.
                  //uchar16 hys = myselectuc16(0, 255, surrounding_greater);
-                 uchar16 hys = convert_uchar16(e);
+                 uchar16 hys = convert_uchar16(Z5 * 255);
                  vstore16(hys, 0, ( __global uchar*)(result + dstIndex));
+
+                 NEXT_ROW;
                  dstIndex += dstXStride;
              }
         };
+        #undef INPUT
+
+
       )CLC",
     };
 

@@ -180,7 +180,7 @@ static void execute(const char* videopath, std::ofstream& results)
 
         //        {
         //            TimeMeasure tm("Canny only");
-        cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3); //Canny only took (ms): 156
+        //cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3); //Canny only took (ms): 156
         //        }
 
 
@@ -190,9 +190,23 @@ static void execute(const char* videopath, std::ofstream& results)
         //!!!!!!!!!!!!!!VISUAL CONTROL HERE, make copy of needed Mat to frame and comment others
         //! to see pictures of what's going on (to display frame itself - just comment all)
         //abandoned_map.copyTo(frame);
-        image.copyTo(frame);
+        //image.copyTo(frame);
 
-        //canny.getStorage().copyTo(frame);
+        canny.getStorage().copyTo(frame);
+        //        {
+        //            cv::Mat grad_x, grad_y, s;
+        //            grad_x.create(gray.rows, gray.cols, CV_32F);
+        //            grad_y.create(gray.rows, gray.cols, CV_32F);
+        //            s.create(gray.rows, gray.cols, CV_32F);
+
+        //            cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3);
+        //            cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3);
+
+        //            cv::multiply(grad_x, grad_x, grad_x);
+        //            cv::multiply(grad_y, grad_y, grad_y);
+        //            cv::sqrt(grad_x + grad_y, s);
+        //            s.convertTo(frame, CV_8U );
+        //        }
 #endif
 
         for (auto& atu : abandoned_objects.candidat)
