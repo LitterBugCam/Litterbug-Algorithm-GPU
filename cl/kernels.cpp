@@ -242,11 +242,11 @@ cl::Program getCompiledKernels()
         #define INPUT2 (( INP_MEM float*)(alignedGMod + srcIndex))
        __kernel void non_maximum(INP_MEM float16* restrict angles, INP_MEM float16* restrict alignedGMod, __global float16* restrict N)
         {
-              const float16 pi8 = 0.39269908125f; //pi/8 (half width of interval around gradient ray)
-              const float16 pi4 = 0.7853981625f;
-              const float16 pi34= 3.f * 0.7853981625f;
-              const float16 pi2 = 1.570796325f;
-              const float16 pi1 = 3.14159265f;
+              float16 pi8 = 0.39269908125f; //pi/8 (half width of interval around gradient ray)
+              float16 pi4 = 0.7853981625f;
+              float16 pi34= 3.f * 0.7853981625f;
+              float16 pi2 = 1.570796325f;
+              float16 pi1 = 3.14159265f;
 
               INIT_PADDED;
               float   a = INPUT2[-1];
