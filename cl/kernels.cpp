@@ -216,18 +216,14 @@ cl::Program getCompiledKernels()
                 float16 an  = myatan2f16(Gy, Gx);
 
                 //prepairing stuff for Canny - result will be gradient with [0; pi) - we dont care if it poinst left or right there
-                     //float16 mag = sqrt(Gx * Gx + Gy * Gy); //maybe not working on PI
                      float16 mag = fabs(Gx) + fabs(Gy); //default opencv Canny behaviour
-                     //float16 rad = fmod(an + 3.14159265f, 3.14159265f);
-                     float16 rad = myselectf16(an, an + 3.14159265f, isless(an, 0));
-                     vstore16(rad, 0, ( __global float*)(alignedGAngle + dstAlignedIndex));
+//                     float16 rad = myselectf16(an, an + 3.14159265f, isless(an, 0));
+//                     vstore16(rad, 0, ( __global float*)(alignedGAngle + dstAlignedIndex));
                      vstore16(mag, 0, ( __global float*)(alignedGMod + dstAlignedIndex));
                 //done here, must know full matrix prior can do non-maximum supression etc.
 
                 an = myselectf16(an, an + 6.2831853f, isless(an, 0));
                 vstore16(an, 0, ( __global float*)(grad_dir + dstIndex));
-                NEXT_ROW;
-
 
                 float16 bx = myselectf16(vload16(0, ( __global float*)(BSx + dstIndex)), Gx, is_first_run);
                 float16 by = myselectf16(vload16(0, ( __global float*)(BSy + dstIndex)), Gy, is_first_run);
@@ -252,6 +248,8 @@ cl::Program getCompiledKernels()
                 mr = is_plus2 * myselecti16(c2, twos5, c1); //overflow protection
                 if (is_minus1 || is_plus2)
                    vstore16(convert_uchar16(mr), 0, ( __global uchar*)(mapRes + dstIndex));
+
+                NEXT_ROW;
                 dstIndex += dstXStride;
             }
        }
@@ -278,16 +276,21 @@ cl::Program getCompiledKernels()
               float16 e = vload16(0, INPUT);
               float   f = INPUT[16];
 
-
               for (int k = 0; k < 16; ++k)
               {
                   uint dstPaddedIndex = srcIndex;
-                  float16 angle = convert_float16(vload16(0, ( INP_MEM float*)(alignedGAngle + srcIndex)));
+                  //float16 angle = convert_float16(vload16(0, ( INP_MEM float*)(alignedGAngle + srcIndex)));
                   srcIndex += srcXStride;
 
                   float   g = INPUT[-1];
                   float16 h = vload16(0, INPUT);
                   float   i = INPUT[16];
+
+                  //testing if it is faster to recalculate sobel then to load from memory
+                  float16 Gx = (Z7 + 2 * Z8 + Z9) - (Z1 + 2 * Z2 +Z3);
+                  float16 Gy = (Z3 + 2 * Z6 + Z9) - (Z1 + 2 * Z4 +Z7);
+                  float16 an  = myatan2f16(Gy, Gx);
+                  float16 angle = myselectf16(an, an + 3.14159265f, isless(an, 0));
 
         //z1 z2 z3
         //z4 z5 z6
@@ -303,19 +306,16 @@ cl::Program getCompiledKernels()
                   p1 = myselectf16(p1, Z4, atest);
                   p2 = myselectf16(p2, Z6, atest);
 
-                  atest =  isless(pi34, angle); //135
+                  atest =  isless(fabs(angle - pi4), pi8); //45
                   p1 = myselectf16(p1, Z3, atest);
                   p2 = myselectf16(p2, Z7, atest);
 
-                  atest =  islessequal(angle, pi8); //0
+                  atest =  islessequal(angle, pi8) || islessequal(fabs(angle - pi1), pi8); //0
                   p1 = myselectf16(p1, Z2, atest);
                   p2 = myselectf16(p2, Z8, atest);
 
-                  atest =  islessequal(fabs(angle - pi1), pi8); //0
-                  p1 = myselectf16(p1, Z2, atest);
-                  p2 = myselectf16(p2, Z8, atest);
 
-                  atest =  isless(fabs(angle - pi4), pi8); //45
+                  atest =  isless(fabs(angle - pi34), pi8); //135
                   p1 = myselectf16(p1, Z1, atest);
                   p2 = myselectf16(p2, Z9, atest);
 
