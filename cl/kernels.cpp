@@ -236,6 +236,8 @@ cl::Program getCompiledKernels()
         //that is not full Canny, it uses pre-processed values from prior SobelAndMagicDetector
         //expecting angle is specially prepared in [0;pi) so we lost left or right, top or bottom, but we don't care here
         #define INPUT2 (( INP_MEM float*)(alignedGMod + srcIndex))
+
+        #define TMP(ZV1,ZV2) tmp = myselectf16(p1, ZV1, atest); p1 = tmp; tmp = myselectf16(p2, ZV2, atest); p2 = tmp
        __kernel void non_maximum(INP_MEM float16* restrict angles, INP_MEM float16* restrict alignedGMod, __global float16* restrict N)
         {
               float16 pi8 = 0.39269908125f; //pi/8 (half width of interval around gradient ray)
@@ -273,25 +275,19 @@ cl::Program getCompiledKernels()
                   float16 p1 = 0;
                   float16 p2 = 0;
                   int16   atest = 0;
-
+                  float16 tmp;
 
                   atest =  isless(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
-//                  p1 = myselectf16(p1, Z4, atest);
-//                  p2 = myselectf16(p2, Z6, atest);
-
+                  TMP(Z4,Z6);
 
                   atest =  isless(fabs(angle - pi4), pi8); //45
-//                  p1 = myselectf16(p1, Z3, atest);
-//                  p2 = myselectf16(p2, Z7, atest);
-
+                  TMP(Z3,Z7);
 
                   atest =  isless(angle, pi8) || isless(fabs(angle - pi1), pi8); //0
-//                  p1 = myselectf16(p1, Z2, atest);
-//                  p2 = myselectf16(p2, Z8, atest);
+                  TMP(Z2, Z8);
 
                   atest =  isless(fabs(angle - pi34), pi8); //135
-//                  p1 = myselectf16(p1, Z1, atest);
-//                  p2 = myselectf16(p2, Z9, atest);
+                  TMP(Z1, Z9);
 
                   float16 n = myselectf16(0, Z5, isless(p2, Z5) && isless(p1, Z5));
 
@@ -302,7 +298,7 @@ cl::Program getCompiledKernels()
               }
         };
         #undef INPUT2
-
+        #undef TMP
 
         //that will be 1 pass for speed
         #define INPUT3   (( INP_MEM float*)(paddedN + srcIndex))
@@ -534,7 +530,7 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
 
         //Canny using precalculated values by prior kernel
         kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
-        //kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
+        kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
 
 
         COPYD2H(angle);
