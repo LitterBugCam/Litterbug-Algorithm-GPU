@@ -324,8 +324,9 @@ cl::Program getCompiledKernels()
         #undef INPUT
 
 
+        //that will be 1 pass for speed
         #define INPUT   (( __global float*)(paddedN + srcIndex))
-        __kernel void hysterisis(__global int* had_change, __global float16* restrict paddedN, __global float16* restrict paddedN2, __global uchar16* result)
+        __kernel void hysterisis(__global float16* restrict paddedN,  __global uchar16* result)
         {
              const float16 T1 = 40.f NORM;
              const float16 T2 = 3.f * T1 NORM;
@@ -367,20 +368,15 @@ cl::Program getCompiledKernels()
                  int16 PE = isgreaterequal(Z5, T1);
                  float16 nz5 = myselectf16(myselectf16(0, Z5, PE), T2 + 1,  surrounding_greater && PE);
 
-                 changes += any(isnotequal(Z5, nz5));
-                 vstore16(nz5, 0, (( __global float*)(paddedN2 + dstPaddedIndex)));
 
                  uchar16 hys = myselectuc16(0, 255, isgreaterequal(nz5, T2));
                  //uchar16 hys = convert_uchar16(Z5 DENORM); //just copy output of prev kernel
-
-
 
 
                  vstore16(hys, 0, ( __global uchar*)(result + dstIndex));
                  NEXT_ROW;
                  dstIndex += dstXStride;
              }
-            // if (*had_change == 0) atomic_add(had_change, changes);
         };
         #undef INPUT
         #undef OUTPUT
@@ -526,8 +522,6 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
     static cl::Buffer bga (CL_MEM_READ_WRITE, sobel_elems_size * sizeof(float)); //temporary gradient vectors, aligned
     static cl::Buffer bgm (CL_MEM_READ_WRITE, sobel_elems_size * sizeof(float)); //temporary gradient magnitudes, aligned
     static cl::Buffer bN  (CL_MEM_READ_WRITE, sobel_elems_size * sizeof(float)); //temporary non-maximum supression
-    static cl::Buffer bN2 (CL_MEM_READ_WRITE, sobel_elems_size * sizeof(float)); //temporary non-maximum supression
-    static cl::Buffer bchange(CL_MEM_READ_WRITE, sizeof(int)); //had change?
 
     VARS(angle, float);
     VARS(mapR,  uint8_t);
@@ -554,7 +548,7 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
              cl::Buffer&, cl::Buffer&> (Kernels, "SobelAndMagicDetector");
 
         auto kernel_non_maximum = cl::KernelFunctor<cl::Buffer&, cl::Buffer&, cl::Buffer&> (Kernels, "non_maximum");
-        auto kernel_hyst  = cl::KernelFunctor<cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&> (Kernels, "hysterisis");
+        auto kernel_hyst  = cl::KernelFunctor<cl::Buffer&, cl::Buffer&> (Kernels, "hysterisis");
         COPYH2D(gray);
         COPYH2D(mapR);
         COPYH2D(canny);
@@ -566,20 +560,7 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
 
                 //Canny using precalculated values by prior kernel
                 kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bga, bgm, bN).wait();
-                static int had_change[1];
-                auto* ptr1 = &bN;
-                auto* ptr2 = &bN2;
-                while (true)
-                {
-                    *had_change = 0;
-                    cl::copy(queue, had_change, had_change + 1, bchange);
-                    kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bchange, *ptr1,  *ptr2, bcanny).wait();
-                    cl::copy(queue,  bchange, had_change, had_change + 1);
-                    std::cout << *had_change << std::endl;
-                    if (!(*had_change))
-                        break;
-                    std::swap(ptr1, ptr2);
-                }
+                kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
 
                 break;
             }
