@@ -189,10 +189,7 @@ cl::Program getCompiledKernels()
             const float16 as  = alpha_s;
             const float16 fth = fore_th NORM;
             const float16 v19 = 19 NORM;
-            const int16 zeros = 0;
-            const int16 ones  = 1;
-            const int16 twos  = 2;
-            const int16 twos5 = 255;
+
 
             float   a = INPUT[-1]NORM;
             float16 b = convert_float16(vload16(0, INPUT))NORM;
@@ -236,6 +233,11 @@ cl::Program getCompiledKernels()
 
                 if (is_minus1 || is_plus2)
                 {
+                     const int16 zeros = 0;
+                     const int16 ones  = 1;
+                     const int16 twos  = 2;
+                     const int16 twos5 = 255;
+
                      int16 mr           = convert_int16(vload16(0, ( __global uchar*)(mapRes + dstIndex)));
                      mr -= is_minus1;
                      int16 c1 = isgreater(fabs(D_Sx), fth ) && isgreater(fabs(Gx), v19 );
