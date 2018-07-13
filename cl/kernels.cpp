@@ -237,14 +237,14 @@ cl::Program getCompiledKernels()
         //expecting angle is specially prepared in [0;pi) so we lost left or right, top or bottom, but we don't care here
         #define INPUT2 (( INP_MEM float*)(alignedGMod + srcIndex))
 
-        #define TMP(ZV1,ZV2, ANG) p1 = select(p1, ZV1, isless(fabs(angle - ANG), pi8)); p2 = select(p2, ZV2, isless(fabs(angle - ANG), pi8))
+        #define pi8  0.39269908125f
+        #define pi4  0.7853981625f
+        #define pi34 3.f * 0.7853981625f
+        #define pi2  1.570796325f
+        #define pi1  3.14159265f
        __kernel void non_maximum(INP_MEM float16* restrict angles, INP_MEM float16* restrict alignedGMod, __global float16* restrict N)
         {
-              float16 pi8 = 0.39269908125f; //pi/8 (half width of interval around gradient ray)
-              float16 pi4 = 0.7853981625f;
-              float16 pi34= 3.f * 0.7853981625f;
-              float16 pi2 = 1.570796325f;
-              float16 pi1 = 3.14159265f;
+
 
               INIT_PADDED;
               float   a = INPUT2[-1];
@@ -274,23 +274,33 @@ cl::Program getCompiledKernels()
                   //need to figure gradient line and pick 2 of 8 around current
                   float16 p1 = 0;
                   float16 p2 = 0;
+                  int16 atest = 0;
 
-                  TMP(Z4, Z6, pi2);
-                  TMP(Z3, Z7, pi4);
-                  TMP(Z2, Z8, 0);
-                  TMP(Z2, Z8, pi1);
-                  TMP(Z1, Z9, pi34);
+                  atest =  islessequal(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
+                  p1 = myselectf16(p1, Z4, atest);
+                  p2 = myselectf16(p2, Z6, atest);
 
-                  float16 n = myselectf16(0, Z5, isless(p2, Z5) && isless(p1, Z5));
+                  atest =  isless(fabs(angle - pi4), pi8); //45
+                  p1 = myselectf16(p1, Z3, atest);
+                  p2 = myselectf16(p2, Z7, atest);
+
+                  atest =  islessequal(angle, pi8) || islessequal(fabs(angle - pi1), pi8); //0
+                  p1 = myselectf16(p1, Z2, atest);
+                  p2 = myselectf16(p2, Z8, atest);
+
+
+                  atest =  isless(fabs(angle - pi34), pi8); //135
+                  p1 = myselectf16(p1, Z1, atest);
+                  p2 = myselectf16(p2, Z9, atest);
 
                   //vstore16(Z5, 0, ( __global float*)(N + dstPaddedIndex));//DELETE IT, UNCOMMENT BELOW (it just copies magnitude from Sobel to output - for testing)
-                  vstore16(n, 0, ( __global float*)(N + dstPaddedIndex));
+                  vstore16(myselectf16(0, Z5, isless(p2, Z5) && isless(p1, Z5)), 0, ( __global float*)(N + dstPaddedIndex));
                   NEXT_ROW;
                   dstIndex += dstXStride;
               }
         };
         #undef INPUT2
-        #undef TMP
+
 
         //that will be 1 pass for speed
         #define INPUT3   (( INP_MEM float*)(paddedN + srcIndex))
