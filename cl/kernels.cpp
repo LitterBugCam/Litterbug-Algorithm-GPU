@@ -302,7 +302,7 @@ cl::Program getCompiledKernels()
                   p1 = myselectf16(p1, Z4, atest);
                   p2 = myselectf16(p2, Z6, atest);
 
-                  atest =  isless(fabs(angle - pi4), pi8); //45
+                  atest =  isless(pi34, angle); //135
                   p1 = myselectf16(p1, Z3, atest);
                   p2 = myselectf16(p2, Z7, atest);
 
@@ -310,7 +310,8 @@ cl::Program getCompiledKernels()
                   p1 = myselectf16(p1, Z2, atest);
                   p2 = myselectf16(p2, Z8, atest);
 
-                  atest =  isless(pi34, angle); //135
+
+                  atest =  isless(fabs(angle - pi4), pi8); //45
                   p1 = myselectf16(p1, Z1, atest);
                   p2 = myselectf16(p2, Z9, atest);
 
