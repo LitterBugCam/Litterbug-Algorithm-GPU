@@ -551,17 +551,15 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
         COPYH2D(gray);
         COPYH2D(mapR);
         COPYH2D(canny);
-        for (const int kw = gray.cols / 16, kh = gray.rows / 16; true;)
-        {
-            kernel(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s,
-                   fore_th, bgray, bangle, bbx, bby, bmapR, bgm).wait();
+        const int kw = gray.cols / 16;
+        const int kh = gray.rows / 16;
+        //kernel(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s, fore_th, bgray, bangle, bbx, bby, bmapR, bgm).wait();
 
-            //Canny using precalculated values by prior kernel
-            kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
-            //kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
+        //Canny using precalculated values by prior kernel
+        kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
+        //kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
 
-            break;
-        }
+
         COPYD2H(angle);
         COPYD2H(canny);
         if (is_plus2 || is_minus1)
