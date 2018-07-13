@@ -506,8 +506,6 @@ int32_t TimeMeasure::now()
 #define COPYD2H(NAME) cl::copy(queue, b##NAME,  p##NAME.w_ptr(),  p##NAME.end());
 #define COPYH2D(NAME) cl::copy(queue, p##NAME.r_ptr(),  p##NAME.end(), b##NAME);
 
-
-
 //some usefull link about __local memory: https://stackoverflow.com/questions/38345046/local-memory-using-c-wrappers
 void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const float alpha_s, const float fore_th, cv::Mat &gray, cv::Mat& angle, cv::Mat& mapR, cv::Mat& canny)
 {
@@ -551,26 +549,16 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
         COPYH2D(mapR);
         COPYH2D(canny);
         for (const int kw = gray.cols / 16, kh = gray.rows / 16; true;)
-            try
-            {
-                kernel(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s,
-                       fore_th, bgray, bangle, bbx, bby, bmapR, bgm).wait();
+        {
+            kernel(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s,
+                   fore_th, bgray, bangle, bbx, bby, bmapR, bgm).wait();
 
-                //Canny using precalculated values by prior kernel
-                kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
-                //kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
+            //Canny using precalculated values by prior kernel
+            //kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
+            //kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
 
-                break;
-            }
-            catch (cl::Error& err)
-            {
-                if (err.err() == -54)
-                {
-                    --gpus;
-                    continue;
-                }
-                throw err;
-            }
+            break;
+        }
         COPYD2H(angle);
         COPYD2H(canny);
         if (is_plus2 || is_minus1)
