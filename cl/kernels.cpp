@@ -69,7 +69,8 @@ cl::Program getCompiledKernels()
 
                                              float16 myfabs(float16 a)
                                              {
-                                                 return max(-a, a);
+                                                 //return max(-a, a);
+                                                 return a;
                                              }
 
 
