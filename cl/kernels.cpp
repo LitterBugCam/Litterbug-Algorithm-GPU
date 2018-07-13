@@ -258,7 +258,7 @@ cl::Program getCompiledKernels()
 
         //that is not full Canny, it uses pre-processed values from prior SobelAndMagicDetector
         //expecting angle is specially prepared in [0;pi) so we lost left or right, top or bottom, but we don't care here
-        #define INPUT (( INP_MEM float*)(alignedGMod + srcIndex))
+        #define INPUT2 (( INP_MEM float*)(alignedGMod + srcIndex))
        __kernel void non_maximum(INP_MEM float16* restrict angles, INP_MEM float16* restrict alignedGMod, __global float16* restrict N)
         {
               const float16 pi8 = 0.39269908125f; //pi/8 (half width of interval around gradient ray)
@@ -268,14 +268,14 @@ cl::Program getCompiledKernels()
               const float16 pi1 = 3.14159265f;
 
               INIT_PADDED;
-              float   a = INPUT[-1];
-              float16 b = vload16(0, INPUT);
-              float   c = INPUT[16];
+              float   a = INPUT2[-1];
+              float16 b = vload16(0, INPUT2);
+              float   c = INPUT2[16];
               srcIndex += srcXStride;
 
-              float   d = INPUT[-1];
-              float16 e = vload16(0, INPUT);
-              float   f = INPUT[16];
+              float   d = INPUT2[-1];
+              float16 e = vload16(0, INPUT2);
+              float   f = INPUT2[16];
 
               for (int k = 0; k < 16; ++k)
               {
@@ -284,9 +284,9 @@ cl::Program getCompiledKernels()
                   angle = myselectf16(angle, angle - pi1, isgreater(angle, pi1));
                   srcIndex += srcXStride;
 
-                  float   g = INPUT[-1];
-                  float16 h = vload16(0, INPUT);
-                  float   i = INPUT[16];
+                  float   g = INPUT2[-1];
+                  float16 h = vload16(0, INPUT2);
+                  float   i = INPUT2[16];
 
         //z1 z2 z3
         //z4 z5 z6
@@ -323,25 +323,25 @@ cl::Program getCompiledKernels()
                   dstIndex += dstXStride;
               }
         };
-        #undef INPUT
+        #undef INPUT2
 
 
         //that will be 1 pass for speed
-        #define INPUT   (( INP_MEM float*)(paddedN + srcIndex))
+        #define INPUT3   (( INP_MEM float*)(paddedN + srcIndex))
         __kernel void hysterisis(INP_MEM float16* restrict paddedN,  __global uchar16* restrict result)
         {
              const float16 T1 = 40.f NORM;
              const float16 T2 = 3.f * T1 NORM;
 
              INIT_PADDED;
-             float   a = INPUT[-1];
-             float16 b = vload16(0, INPUT);
-             float   c = INPUT[16];
+             float   a = INPUT3[-1];
+             float16 b = vload16(0, INPUT3);
+             float   c = INPUT3[16];
              srcIndex += srcXStride;
 
-             float   d = INPUT[-1];
-             float16 e = vload16(0, INPUT);
-             float   f = INPUT[16];
+             float   d = INPUT3[-1];
+             float16 e = vload16(0, INPUT3);
+             float   f = INPUT3[16];
              int changes = 0;
         //z1 z2 z3
         //z4 z5 z6
@@ -351,9 +351,9 @@ cl::Program getCompiledKernels()
                  uint dstPaddedIndex = srcIndex;
                  srcIndex += srcXStride;
 
-                 float   g = INPUT[-1];
-                 float16 h = vload16(0, INPUT);
-                 float   i = INPUT[16];
+                 float   g = INPUT3[-1];
+                 float16 h = vload16(0, INPUT3);
+                 float   i = INPUT3[16];
 
                  //If the pixel gradient is between the two thresholds, then it will be accepted only if it is connected to a pixel that is above the upper threshold.
 
@@ -380,8 +380,7 @@ cl::Program getCompiledKernels()
                  dstIndex += dstXStride;
              }
         };
-        #undef INPUT
-        #undef OUTPUT
+        #undef INPUT3
 
       )CLC",
     };
