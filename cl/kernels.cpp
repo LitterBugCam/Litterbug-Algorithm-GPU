@@ -340,6 +340,9 @@ cl::Program getCompiledKernels()
              float16 e = vload16(0, INPUT);
              float   f = INPUT[16];
              int changes = 0;
+        //z1 z2 z3
+        //z4 z5 z6
+        //z7 z8 z9
              for (int k = 0; k < 16; ++k)
              {
                  uint dstPaddedIndex = srcIndex;
@@ -351,7 +354,7 @@ cl::Program getCompiledKernels()
 
                  //If the pixel gradient is between the two thresholds, then it will be accepted only if it is connected to a pixel that is above the upper threshold.
 
-                 int16 surrounding_greater = isgreaterequal(Z5, T2);//If a pixel gradient is higher than the upper threshold, the pixel is accepted as an edge
+                 int16 surrounding_greater =                  isgreaterequal(Z5, T2);//If a pixel gradient is higher than the upper threshold, the pixel is accepted as an edge
                  surrounding_greater = surrounding_greater || isgreaterequal(Z1, T2);
                  surrounding_greater = surrounding_greater || isgreaterequal(Z2, T2);
                  surrounding_greater = surrounding_greater || isgreaterequal(Z3, T2);
