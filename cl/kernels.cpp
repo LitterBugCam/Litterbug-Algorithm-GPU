@@ -218,7 +218,8 @@ cl::Program getCompiledKernels()
                 //prepairing stuff for Canny - result will be gradient with [0; pi) - we dont care if it poinst left or right there
                      //float16 mag = sqrt(Gx * Gx + Gy * Gy); //maybe not working on PI
                      float16 mag = fabs(Gx) + fabs(Gy); //default opencv Canny behaviour
-                     float16 rad = fmod(an + 3.14159265f, 3.14159265f);
+                     //float16 rad = fmod(an + 3.14159265f, 3.14159265f);
+                     float16 rad = myselectf16(an, an + 3.14159265f, isless(an, 0));
                      vstore16(rad, 0, ( __global float*)(alignedGAngle + dstAlignedIndex));
                      vstore16(mag, 0, ( __global float*)(alignedGMod + dstAlignedIndex));
                 //done here, must know full matrix prior can do non-maximum supression etc.
@@ -310,6 +311,9 @@ cl::Program getCompiledKernels()
                   p1 = myselectf16(p1, Z2, atest);
                   p2 = myselectf16(p2, Z8, atest);
 
+                  atest =  islessequal(fabs(angle - pi1), pi8); //0
+                  p1 = myselectf16(p1, Z2, atest);
+                  p2 = myselectf16(p2, Z8, atest);
 
                   atest =  isless(fabs(angle - pi4), pi8); //45
                   p1 = myselectf16(p1, Z1, atest);
