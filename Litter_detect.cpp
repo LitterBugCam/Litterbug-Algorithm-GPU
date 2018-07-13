@@ -159,7 +159,6 @@ static void execute(const char* videopath, std::ofstream& results)
 
         if (i > frameinit && i % framemod2 == 0)
         {
-            TimeMeasure tm("Abba map postprocess");
             for (fullbits_int_t j = 1; j < abandoned_map.rows - 1; ++j)
             {
                 plain_map_ptr  += abandoned_map.cols;
@@ -190,9 +189,9 @@ static void execute(const char* videopath, std::ofstream& results)
         //!!!!!!!!!!!!!!VISUAL CONTROL HERE, make copy of needed Mat to frame and comment others
         //! to see pictures of what's going on (to display frame itself - just comment all)
         //abandoned_map.copyTo(frame);
-        image.copyTo(frame);
+        //image.copyTo(frame);
 
-        //canny.getStorage().copyTo(frame);
+        canny.getStorage().copyTo(frame);
 #endif
 
         for (auto& atu : abandoned_objects.candidat)
