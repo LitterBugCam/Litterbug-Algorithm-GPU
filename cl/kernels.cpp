@@ -530,7 +530,7 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
 
         //Canny using precalculated values by prior kernel
         kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
-        kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
+        //kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
 
 
         COPYD2H(angle);
