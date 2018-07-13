@@ -298,7 +298,7 @@ cl::Program getCompiledKernels()
                   int16   atest = 0;
 
 
-                  atest =  islessequal(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
+                  atest =  isless(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
                   p1 = myselectf16(p1, Z4, atest);
                   p2 = myselectf16(p2, Z6, atest);
 
@@ -306,7 +306,7 @@ cl::Program getCompiledKernels()
                   p1 = myselectf16(p1, Z3, atest);
                   p2 = myselectf16(p2, Z7, atest);
 
-                  atest =  islessequal(angle, pi8) || islessequal(fabs(angle - pi1), pi8); //0
+                  atest =  isless(angle, pi8) || isless(fabs(angle - pi1), pi8); //0
                   p1 = myselectf16(p1, Z2, atest);
                   p2 = myselectf16(p2, Z8, atest);
 
@@ -357,21 +357,21 @@ cl::Program getCompiledKernels()
 
                  //If the pixel gradient is between the two thresholds, then it will be accepted only if it is connected to a pixel that is above the upper threshold.
 
-                 int16 surrounding_greater =                  isgreaterequal(Z5, T2);//If a pixel gradient is higher than the upper threshold, the pixel is accepted as an edge
-                 surrounding_greater = surrounding_greater || isgreaterequal(Z1, T2);
-                 surrounding_greater = surrounding_greater || isgreaterequal(Z2, T2);
-                 surrounding_greater = surrounding_greater || isgreaterequal(Z3, T2);
-                 surrounding_greater = surrounding_greater || isgreaterequal(Z4, T2);
-                 surrounding_greater = surrounding_greater || isgreaterequal(Z6, T2);
-                 surrounding_greater = surrounding_greater || isgreaterequal(Z7, T2);
-                 surrounding_greater = surrounding_greater || isgreaterequal(Z8, T2);
-                 surrounding_greater = surrounding_greater || isgreaterequal(Z9, T2);
+                 int16 surrounding_greater =                  isgreater(Z5, T2);//If a pixel gradient is higher than the upper threshold, the pixel is accepted as an edge
+                 surrounding_greater = surrounding_greater || isgreater(Z1, T2);
+                 surrounding_greater = surrounding_greater || isgreater(Z2, T2);
+                 surrounding_greater = surrounding_greater || isgreater(Z3, T2);
+                 surrounding_greater = surrounding_greater || isgreater(Z4, T2);
+                 surrounding_greater = surrounding_greater || isgreater(Z6, T2);
+                 surrounding_greater = surrounding_greater || isgreater(Z7, T2);
+                 surrounding_greater = surrounding_greater || isgreater(Z8, T2);
+                 surrounding_greater = surrounding_greater || isgreater(Z9, T2);
 
-                 int16 PE = isgreaterequal(Z5, T1);
+                 int16 PE = isgreater(Z5, T1);
                  float16 nz5 = myselectf16(myselectf16(0, Z5, PE), T2 + 1,  surrounding_greater && PE);
 
 
-                 uchar16 hys = myselectuc16(0, 255, isgreaterequal(nz5, T2));
+                 uchar16 hys = myselectuc16(0, 255, isgreater(nz5, T2));
                  //uchar16 hys = convert_uchar16(Z5 DENORM); //just copy output of prev kernel
 
 
