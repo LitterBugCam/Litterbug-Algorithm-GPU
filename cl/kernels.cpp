@@ -192,22 +192,22 @@ cl::Program getCompiledKernels()
             const int16 twos  = 2;
             const int16 twos5 = 255;
 
-            float   a = INPUT[-1] / 255.f;
-            float16 b = convert_float16(vload16(0, INPUT)) / 255.f;
-            float   c = INPUT[16] / 255.f;
+            float   a = INPUT[-1];
+            float16 b = convert_float16(vload16(0, INPUT));
+            float   c = INPUT[16];
             srcIndex += srcXStride;
 
-            float   d = INPUT[-1] / 255.f;
-            float16 e = convert_float16(vload16(0, INPUT)) / 255.f;
-            float   f = INPUT[16] / 255.f;
+            float   d = INPUT[-1];
+            float16 e = convert_float16(vload16(0, INPUT));
+            float   f = INPUT[16];
 
             for (int k = 0; k < 16; ++k)
             {
                 uint dstAlignedIndex = srcIndex; //ok, I hope that is correct, i.e. middle of the matrix is index
                 srcIndex += srcXStride;
-                float   g = INPUT[-1] / 255.f;
-                float16 h = convert_float16(vload16(0, INPUT)) / 255.f;
-                float   i = INPUT[16] / 255.f;
+                float   g = INPUT[-1];
+                float16 h = convert_float16(vload16(0, INPUT));
+                float   i = INPUT[16];
 
                 float16 Gx = (Z7 + 2 * Z8 + Z9) - (Z1 + 2 * Z2 +Z3);
                 float16 Gy = (Z3 + 2 * Z6 + Z9) - (Z1 + 2 * Z4 +Z7);
@@ -256,7 +256,7 @@ cl::Program getCompiledKernels()
         //that is not full Canny, it uses pre-processed values from prior SobelAndMagicDetector
         //expecting angle is specially prepared in [0;pi) so we lost left or right, top or bottom, but we don't care here
         #define INPUT (( INP_MEM float*)(alignedGMod + srcIndex))
-       __kernel void Canny(INP_MEM float16* restrict alignedGAngle, INP_MEM float16* restrict alignedGMod, __global float16* N)
+       __kernel void non_maximum(INP_MEM float16* restrict alignedGAngle, INP_MEM float16* restrict alignedGMod, __global float16* N)
         {
               const float16 pi8 = 0.39269908125f; //pi/8 (half width of interval around gradient ray)
               const float16 pi4 = 0.7853981625f;
@@ -310,9 +310,9 @@ cl::Program getCompiledKernels()
                   p2 = myselectf16(p2, Z6, atest);
 
 
-                  float16 n = myselectf16(0, Z5, isless(p2, Z5) && isless(p1, Z5)); //not sure maybe isless(e, p1) and even swap p1/p2 ... diff articles show different
+                  float16 n = myselectf16(0, Z5, isless(p2, Z5) && isless(p1, Z5));
 
-                  //vstore16(Z5, 0, ( __global float*)(N + dstPaddedIndex));//DELETE IT, UNCOMMENT BELOW (it just copies magnitude to output - for testing)
+                  //vstore16(Z5, 0, ( __global float*)(N + dstPaddedIndex));//DELETE IT, UNCOMMENT BELOW (it just copies magnitude from Sobel to output - for testing)
                   vstore16(n, 0, ( __global float*)(N + dstPaddedIndex));
                   NEXT_ROW;
               }
@@ -351,47 +351,28 @@ cl::Program getCompiledKernels()
                  float16 h = vload16(0, INPUT);
                  float   i = INPUT[16];
 
-
-                 float16 p1 = 0;
-                 float16 p2 = 0;
-                 int16   atest = 0;
-
-                 atest =  isless(fabs(angle-pi4), pi8);
-                 p1 = myselectf16(p1, Z3, atest);
-                 p2 = myselectf16(p2, Z7, atest);
-
-                //possibly should switch p4 and p34 - that means 0 is at left
-                 atest =  isless(fabs(angle-pi34), pi8);
-                 p1 = myselectf16(p1, Z1, atest);
-                 p2 = myselectf16(p2, Z9, atest);
-
-                 atest =  isless(fabs(angle-pi2), pi8);
-                 p1 = myselectf16(p1, Z2, atest);
-                 p2 = myselectf16(p2, Z8, atest);
-
-                 atest =  isless(fabs(angle), pi8);
-                 p1 = myselectf16(p1, Z4, atest);
-                 p2 = myselectf16(p2, Z6, atest);
                  //If the pixel gradient is between the two thresholds, then it will be accepted only if it is connected to a pixel that is above the upper threshold.
                  int16 surrounding_greater = 0;
 
-//                 surrounding_greater = surrounding_greater || isgreater((float16)(a, b.s0123, b.s456789ab, b.scde), T2);
-//                 surrounding_greater = surrounding_greater || isgreater((float16)(b.s123, b.s4567, b.s89abcdef, c), T2);
-//                 surrounding_greater = surrounding_greater || isgreater((float16)(d, e.s0123, e.s456789ab, e.scde), T2);
-//                 surrounding_greater = surrounding_greater || isgreater((float16)(e.s123, e.s4567, e.s89abcdef, f), T2);
-//                 surrounding_greater = surrounding_greater || isgreater((float16)(g, h.s0123, h.s456789ab, h.scde), T2);
-//                 surrounding_greater = surrounding_greater || isgreater((float16)(h.s123, h.s4567, h.s89abcdef, i), T2);
-//                 surrounding_greater = surrounding_greater || isgreater(b, T2);
-//                 surrounding_greater = surrounding_greater || isgreater(h, T2);
+                 surrounding_greater = surrounding_greater || isgreater(Z1, T2);
+                 surrounding_greater = surrounding_greater || isgreater(Z2, T2);
+                 surrounding_greater = surrounding_greater || isgreater(Z3, T2);
+                 surrounding_greater = surrounding_greater || isgreater(Z4, T2); //skipping Z5 itself
+                 surrounding_greater = surrounding_greater || isgreater(Z6, T2);
+                 surrounding_greater = surrounding_greater || isgreater(Z7, T2);
+                 surrounding_greater = surrounding_greater || isgreater(Z8, T2);
+                 surrounding_greater = surrounding_greater || isgreater(Z9, T2);
 
-                 surrounding_greater = surrounding_greater || isgreater(p1, T2) || isgreater(p2, T2); //in gradient direction
 
-                 surrounding_greater = surrounding_greater || isgreater(e, T2);//If a pixel gradient is higher than the upper threshold, the pixel is accepted as an edge
-                 surrounding_greater = surrounding_greater && isgreater(e, T1);//If a pixel gradient value is below the lower threshold, then it is rejected.
-                 //uchar16 hys = myselectuc16(0, 255, surrounding_greater);
-                 uchar16 hys = convert_uchar16(Z5 * 255);
+                 surrounding_greater = surrounding_greater || isgreater(Z5, T2);//If a pixel gradient is higher than the upper threshold, the pixel is accepted as an edge
+                 surrounding_greater = surrounding_greater && isless   (Z5, T1);//If a pixel gradient value is below the lower threshold, then it is rejected.
+
+                 uchar16 hys = myselectuc16(0, 255, surrounding_greater);
+
+                 //uchar16 hys = convert_uchar16(select((uint16)0, (uint16)255, surrounding_greater));
+                 //uchar16 hys = convert_uchar16(Z5); //just copies out prev. Canny to output (could be Sobel see there)
+
                  vstore16(hys, 0, ( __global uchar*)(result + dstIndex));
-
                  NEXT_ROW;
                  dstIndex += dstXStride;
              }
@@ -565,7 +546,7 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
              cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&,
              cl::Buffer&, cl::Buffer&> (Kernels, "SobelAndMagicDetector");
 
-        auto kernel_canny = cl::KernelFunctor<cl::Buffer&, cl::Buffer&, cl::Buffer&> (Kernels, "Canny");
+        auto kernel_non_maximum = cl::KernelFunctor<cl::Buffer&, cl::Buffer&, cl::Buffer&> (Kernels, "non_maximum");
         auto kernel_hyst  = cl::KernelFunctor<cl::Buffer&, cl::Buffer&, cl::Buffer&> (Kernels, "hysterisis");
         COPYH2D(gray);
         COPYH2D(mapR);
@@ -577,7 +558,7 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
                        fore_th, bgray, bangle, bbx, bby, bmapR, bga, bgm).wait();
 
                 //Canny using precalculated values by prior kernel
-                kernel_canny(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bga, bgm, bN).wait();
+                kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bga, bgm, bN).wait();
                 kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bga, bN, bcanny).wait();
                 break;
             }

@@ -151,6 +151,11 @@ static void execute(const char* videopath, std::ofstream& results)
         cl->sobel2magic(i % framemod2 == 0, i > frameinit && i % framemod2 == 0, i == 0, alpha_S, fore_th, gray,
                         angles.getStorage(), abandoned_map, canny.getStorage());
 
+        //        {
+        //            TimeMeasure tm("Canny only");
+        //cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3); //Canny only took (ms): 156
+        //        }
+
 
         if (i > frameinit && i % framemod2 == 0)
         {
@@ -178,11 +183,6 @@ static void execute(const char* videopath, std::ofstream& results)
         cv::threshold(abandoned_map, frame, aotime, 255, cv::THRESH_BINARY);
         cv::threshold(abandoned_map, object_map.getStorage(), aotime2, 255, cv::THRESH_BINARY);
 
-        //        {
-        //            TimeMeasure tm("Canny only");
-        //cv::Canny(gray, canny.getStorage(), 30, 30 * 3, 3); //Canny only took (ms): 156
-        //        }
-
 
         abandoned_objects.populateObjects(frame, i);
 
@@ -190,23 +190,9 @@ static void execute(const char* videopath, std::ofstream& results)
         //!!!!!!!!!!!!!!VISUAL CONTROL HERE, make copy of needed Mat to frame and comment others
         //! to see pictures of what's going on (to display frame itself - just comment all)
         //abandoned_map.copyTo(frame);
-        //image.copyTo(frame);
+        image.copyTo(frame);
 
-        canny.getStorage().copyTo(frame);
-        //        {
-        //            cv::Mat grad_x, grad_y, s;
-        //            grad_x.create(gray.rows, gray.cols, CV_32F);
-        //            grad_y.create(gray.rows, gray.cols, CV_32F);
-        //            s.create(gray.rows, gray.cols, CV_32F);
-
-        //            cv::Sobel(gray, grad_x, CV_32F, 1, 0, 3);
-        //            cv::Sobel(gray, grad_y, CV_32F, 0, 1, 3);
-
-        //            cv::multiply(grad_x, grad_x, grad_x);
-        //            cv::multiply(grad_y, grad_y, grad_y);
-        //            cv::sqrt(grad_x + grad_y, s);
-        //            s.convertTo(frame, CV_8U );
-        //        }
+        //canny.getStorage().copyTo(frame);
 #endif
 
         for (auto& atu : abandoned_objects.candidat)
