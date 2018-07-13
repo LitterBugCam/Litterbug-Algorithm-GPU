@@ -182,7 +182,7 @@ cl::Program getCompiledKernels()
         __kernel void SobelAndMagicDetector(const int is_minus1, const int is_plus2, const int is_first_run, const float alpha_s, const float fore_th,
                                             INP_MEM uchar16* restrict input, __global float16* restrict grad_dir,
                                             __global float16* restrict BSx,  __global float16* restrict BSy, __global uchar16* restrict mapRes
-                                            ,__global float16* restrict alignedGAngle, __global float16* restrict alignedGMod
+                                            , __global float16* restrict alignedGMod
                                            )
         {
             INIT_PADDED;
@@ -217,8 +217,6 @@ cl::Program getCompiledKernels()
 
                 //prepairing stuff for Canny - result will be gradient with [0; pi) - we dont care if it poinst left or right there
                      float16 mag = fabs(Gx) + fabs(Gy); //default opencv Canny behaviour
-//                     float16 rad = myselectf16(an, an + 3.14159265f, isless(an, 0));
-//                     vstore16(rad, 0, ( __global float*)(alignedGAngle + dstAlignedIndex));
                      vstore16(mag, 0, ( __global float*)(alignedGMod + dstAlignedIndex));
                 //done here, must know full matrix prior can do non-maximum supression etc.
 
@@ -258,7 +256,7 @@ cl::Program getCompiledKernels()
         //that is not full Canny, it uses pre-processed values from prior SobelAndMagicDetector
         //expecting angle is specially prepared in [0;pi) so we lost left or right, top or bottom, but we don't care here
         #define INPUT (( INP_MEM float*)(alignedGMod + srcIndex))
-       __kernel void non_maximum(INP_MEM float16* restrict alignedGAngle, INP_MEM float16* restrict alignedGMod, __global float16* N)
+       __kernel void non_maximum(INP_MEM float16* restrict angles, INP_MEM float16* restrict alignedGMod, __global float16* N)
         {
               const float16 pi8 = 0.39269908125f; //pi/8 (half width of interval around gradient ray)
               const float16 pi4 = 0.7853981625f;
@@ -279,18 +277,13 @@ cl::Program getCompiledKernels()
               for (int k = 0; k < 16; ++k)
               {
                   uint dstPaddedIndex = srcIndex;
-                  //float16 angle = convert_float16(vload16(0, ( INP_MEM float*)(alignedGAngle + srcIndex)));
+                  float16 angle = convert_float16(vload16(0, ( INP_MEM float*)(angles + dstIndex)));
+                  angle = myselectf16(angle, angle - pi1, isgreater(angle, pi1));
                   srcIndex += srcXStride;
 
                   float   g = INPUT[-1];
                   float16 h = vload16(0, INPUT);
                   float   i = INPUT[16];
-
-                  //testing if it is faster to recalculate sobel then to load from memory
-                  float16 Gx = (Z7 + 2 * Z8 + Z9) - (Z1 + 2 * Z2 +Z3);
-                  float16 Gy = (Z3 + 2 * Z6 + Z9) - (Z1 + 2 * Z4 +Z7);
-                  float16 an  = myatan2f16(Gy, Gx);
-                  float16 angle = myselectf16(an, an + 3.14159265f, isless(an, 0));
 
         //z1 z2 z3
         //z4 z5 z6
@@ -324,6 +317,7 @@ cl::Program getCompiledKernels()
                   //vstore16(Z5, 0, ( __global float*)(N + dstPaddedIndex));//DELETE IT, UNCOMMENT BELOW (it just copies magnitude from Sobel to output - for testing)
                   vstore16(n, 0, ( __global float*)(N + dstPaddedIndex));
                   NEXT_ROW;
+                  dstIndex += dstXStride;
               }
         };
         #undef INPUT
@@ -524,7 +518,6 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
     //GPU only buffers
     static cl::Buffer bbx (CL_MEM_READ_WRITE, elems_size * sizeof(float));
     static cl::Buffer bby (CL_MEM_READ_WRITE, elems_size * sizeof(float));
-    static cl::Buffer bga (CL_MEM_READ_WRITE, sobel_elems_size * sizeof(float)); //temporary gradient vectors, aligned
     static cl::Buffer bgm (CL_MEM_READ_WRITE, sobel_elems_size * sizeof(float)); //temporary gradient magnitudes, aligned
     static cl::Buffer bN  (CL_MEM_READ_WRITE, sobel_elems_size * sizeof(float)); //temporary non-maximum supression
 
@@ -550,7 +543,7 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
     {
         auto kernel = cl::KernelFunctor<int, int, int, float, float,
              cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&,
-             cl::Buffer&, cl::Buffer&> (Kernels, "SobelAndMagicDetector");
+             cl::Buffer&> (Kernels, "SobelAndMagicDetector");
 
         auto kernel_non_maximum = cl::KernelFunctor<cl::Buffer&, cl::Buffer&, cl::Buffer&> (Kernels, "non_maximum");
         auto kernel_hyst  = cl::KernelFunctor<cl::Buffer&, cl::Buffer&> (Kernels, "hysterisis");
@@ -561,10 +554,10 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
             try
             {
                 kernel(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s,
-                       fore_th, bgray, bangle, bbx, bby, bmapR, bga, bgm).wait();
+                       fore_th, bgray, bangle, bbx, bby, bmapR, bgm).wait();
 
                 //Canny using precalculated values by prior kernel
-                kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bga, bgm, bN).wait();
+                kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
                 kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
 
                 break;
