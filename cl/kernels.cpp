@@ -324,8 +324,8 @@ cl::Program getCompiledKernels()
 
 
         //that will be 1 pass for speed
-        #define INPUT   (( __global float*)(paddedN + srcIndex))
-        __kernel void hysterisis(__global float16* restrict paddedN,  __global uchar16* result)
+        #define INPUT   (( INP_MEM float*)(paddedN + srcIndex))
+        __kernel void hysterisis(INP_MEM float16* restrict paddedN,  __global uchar16* result)
         {
              const float16 T1 = 40.f NORM;
              const float16 T2 = 3.f * T1 NORM;
@@ -558,7 +558,7 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
 
                 //Canny using precalculated values by prior kernel
                 kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
-                kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
+                //kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
 
                 break;
             }
