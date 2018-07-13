@@ -67,13 +67,19 @@ cl::Program getCompiledKernels()
                                                  return atrue * cond + afalse * not_cond;
                                              }
 
+                                             float16 myfabs(float16 a)
+                                             {
+                                                 return max(-a, a);
+                                             }
+
+
                                              //nvidia ref. impl.: http://developer.download.nvidia.com/cg/atan2.html
                                              float16 myatan2f16(float16 y, float16 x)
                                              {
                                                float16 t0, t1, t2, t3, t4;
 
-                                               t3 = fabs(x);
-                                               t1 = fabs(y);
+                                               t3 = myfabs(x);
+                                               t1 = myfabs(y);
                                                t0 = max(t3, t1);
                                                t1 = min(t3, t1);
                                                t3 = 1.f / t0;
@@ -88,8 +94,8 @@ cl::Program getCompiledKernels()
                                                t0 = t0 * t4 + 0.999995630f;
                                                t3 = t0 * t3;
 
-                                               //t3 = (fabs(y) > fabs(x)) ? 1.570796327f - t3 : t3;
-                                               t3 = myselectf16(t3, 1.570796327f - t3, isgreater(fabs(y), fabs(x)));
+                                               //t3 = (myfabs(y) > myfabs(x)) ? 1.570796327f - t3 : t3;
+                                               t3 = myselectf16(t3, 1.570796327f - t3, isgreater(myfabs(y), myfabs(x)));
                                                //t3 = (x < 0) ?  3.141592654f - t3 : t3;
                                                t3 = myselectf16(t3, 3.141592654f - t3, isless(x, 0));
                                                //t3 = (y < 0) ? -t3 : t3;
@@ -98,32 +104,7 @@ cl::Program getCompiledKernels()
                                              }
 
                                              //nvidia ref. impl.: http://developer.download.nvidia.com/cg/atan2.html
-                                             float myatan2f1(float y, float x)
-                                             {
-                                               float t0, t1, t2, t3, t4;
 
-                                               t3 = fabs(x);
-                                               t1 = fabs(y);
-                                               t0 = max(t3, t1);
-                                               t1 = min(t3, t1);
-                                               t3 = 1.f / t0;
-                                               t3 = t1 * t3;
-
-                                               t4 = t3 * t3;
-                                               t0 =         - 0.013480470f;
-                                               t0 = t0 * t4 + 0.057477314f;
-                                               t0 = t0 * t4 - 0.121239071f;
-                                               t0 = t0 * t4 + 0.195635925f;
-                                               t0 = t0 * t4 - 0.332994597f;
-                                               t0 = t0 * t4 + 0.999995630f;
-                                               t3 = t0 * t3;
-
-                                               t3 = (fabs(y) > fabs(x)) ? 1.570796327f - t3 : t3;
-                                               t3 = (x < 0) ?  3.141592654f - t3 : t3;
-                                               t3 = (y < 0) ? -t3 : t3;
-
-                                               return t3;
-                                             }
 
 
     )CLC";
@@ -156,6 +137,11 @@ cl::Program getCompiledKernels()
         //https://software.intel.com/en-us/videos/optimizing-simple-opencl-kernels-sobel-kernel-optimization
 
         R"CLC(
+
+        //bugfix for rpi
+        #define fabs myfabs
+
+
         #define INP_MEM __global const
         //#define NORM /255.f
         //#define DENORM *255.f
@@ -298,22 +284,22 @@ cl::Program getCompiledKernels()
                   int16   atest = 0;
 
 
-//                  atest =  isless(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
-//                  p1 = myselectf16(p1, Z4, atest);
-//                  p2 = myselectf16(p2, Z6, atest);
+                  atest =  isless(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
+                  p1 = myselectf16(p1, Z4, atest);
+                  p2 = myselectf16(p2, Z6, atest);
 
-//                  atest =  isless(fabs(angle - pi4), pi8); //45
-//                  p1 = myselectf16(p1, Z3, atest);
-//                  p2 = myselectf16(p2, Z7, atest);
+                  atest =  isless(fabs(angle - pi4), pi8); //45
+                  p1 = myselectf16(p1, Z3, atest);
+                  p2 = myselectf16(p2, Z7, atest);
 
-                  atest =  isless(angle, pi8) ;//|| isless(fabs(angle - pi1), pi8); //0
+                  atest =  isless(angle, pi8) || isless(fabs(angle - pi1), pi8); //0
                   p1 = myselectf16(p1, Z2, atest);
                   p2 = myselectf16(p2, Z8, atest);
 
 
-//                  atest =  isless(fabs(angle - pi34), pi8); //135
-//                  p1 = myselectf16(p1, Z1, atest);
-//                  p2 = myselectf16(p2, Z9, atest);
+                  atest =  isless(fabs(angle - pi34), pi8); //135
+                  p1 = myselectf16(p1, Z1, atest);
+                  p2 = myselectf16(p2, Z9, atest);
 
                   float16 n = myselectf16(0, Z5, isless(p2, Z5) && isless(p1, Z5));
 
@@ -552,11 +538,11 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
         COPYH2D(canny);
         const int kw = gray.cols / 16;
         const int kh = gray.rows / 16;
-        //kernel(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s, fore_th, bgray, bangle, bbx, bby, bmapR, bgm).wait();
+        kernel(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s, fore_th, bgray, bangle, bbx, bby, bmapR, bgm).wait();
 
         //Canny using precalculated values by prior kernel
         kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
-        //kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
+        kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
 
 
         COPYD2H(angle);
