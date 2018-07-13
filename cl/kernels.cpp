@@ -67,12 +67,6 @@ cl::Program getCompiledKernels()
                                                  return atrue * cond + afalse * not_cond;
                                              }
 
-                                             float16 myfabs(float16 a)
-                                             {
-                                                 //return max(-a, a);
-                                                 return a;
-                                             }
-
 
                                              //nvidia ref. impl.: http://developer.download.nvidia.com/cg/atan2.html
                                              float16 myatan2f16(float16 y, float16 x)
@@ -95,8 +89,8 @@ cl::Program getCompiledKernels()
                                                t0 = t0 * t4 + 0.999995630f;
                                                t3 = t0 * t3;
 
-                                               //t3 = (myfabs(y) > myfabs(x)) ? 1.570796327f - t3 : t3;
-                                               t3 = myselectf16(t3, 1.570796327f - t3, isgreater(myfabs(y), myfabs(x)));
+                                               //t3 = (fabs(y) > fabs(x)) ? 1.570796327f - t3 : t3;
+                                               t3 = myselectf16(t3, 1.570796327f - t3, isgreater(fabs(y), fabs(x)));
                                                //t3 = (x < 0) ?  3.141592654f - t3 : t3;
                                                t3 = myselectf16(t3, 3.141592654f - t3, isless(x, 0));
                                                //t3 = (y < 0) ? -t3 : t3;
@@ -140,7 +134,7 @@ cl::Program getCompiledKernels()
         R"CLC(
 
         //bugfix for rpi
-        #define fabs myfabs
+        //#define fabs myfabs
 
 
         #define INP_MEM __global const
@@ -284,21 +278,25 @@ cl::Program getCompiledKernels()
                   float16 p2 = 0;
                   int16   atest = 0;
 
+                  float16 delta = fabs(angle - pi2);
 
-                  atest =  isless(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
+                  atest =  isless(delta, pi8); //90 not sure why, but this works better 90 = up/left
                   p1 = myselectf16(p1, Z4, atest);
                   p2 = myselectf16(p2, Z6, atest);
 
-                  atest =  isless(fabs(angle - pi4), pi8); //45
+                  delta = fabs(angle - pi4);
+                  atest =  isless(delta, pi8); //45
                   p1 = myselectf16(p1, Z3, atest);
                   p2 = myselectf16(p2, Z7, atest);
 
-                  atest =  isless(angle, pi8) || isless(fabs(angle - pi1), pi8); //0
+                  delta = fabs(angle - pi1);
+                  atest =  isless(angle, pi8) || isless(delta, pi8); //0
                   p1 = myselectf16(p1, Z2, atest);
                   p2 = myselectf16(p2, Z8, atest);
 
 
-                  atest =  isless(fabs(angle - pi34), pi8); //135
+                  delta = fabs(angle - pi34);
+                  atest =  isless(delta, pi8); //135
                   p1 = myselectf16(p1, Z1, atest);
                   p2 = myselectf16(p2, Z9, atest);
 
@@ -543,7 +541,7 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
 
         //Canny using precalculated values by prior kernel
         kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
-        kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
+        //kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
 
 
         COPYD2H(angle);
