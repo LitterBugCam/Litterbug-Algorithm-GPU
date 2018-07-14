@@ -276,27 +276,31 @@ cl::Program getCompiledKernels()
                   float16 p2 = 0;
                   int16 atest = 0;
 
+                  float16 z1 = Z1;float16 z2 = Z2;float16 z3 = Z3;
+                  float16 z4 = Z4;float16 z5 = Z5;float16 z6 = Z6;
+                  float16 z7 = Z7;float16 z8 = Z8;float16 z9 = Z9;
+
                   atest =  islessequal(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
-                  p1 = myselectf16(p1, (Z4), atest);
-                  p2 = myselectf16(p2, (Z6), atest);
+                  p1 = myselectf16(p1, (z4), atest);
+                  p2 = myselectf16(p2, (z6), atest);
 
                   atest =  isless(fabs(angle - pi4), pi8); //45
-                  p1 = myselectf16(p1, (Z3), atest);
-                  p2 = myselectf16(p2, (Z7), atest);
+                  p1 = myselectf16(p1, (z3), atest);
+                  p2 = myselectf16(p2, (z7), atest);
 
                   atest =  islessequal(angle, pi8) || islessequal(fabs(angle - pi1), pi8); //0
-                  p1 = myselectf16(p1, (Z2), atest);
-                  p2 = myselectf16(p2, (Z8), atest);
+                  p1 = myselectf16(p1, (z2), atest);
+                  p2 = myselectf16(p2, (z8), atest);
 
 
                   atest =  isless(fabs(angle - pi34), pi8); //135
-                  p1 = myselectf16(p1, (Z1), atest);
-                  p2 = myselectf16(p2, (Z9), atest);
+                  p1 = myselectf16(p1, (z1), atest);
+                  p2 = myselectf16(p2, (z9), atest);
 
 
 
-                  //vstore16(Z5, 0, ( __global float*)(N + dstPaddedIndex));//DELETE IT, UNCOMMENT BELOW (it just copies magnitude from Sobel to output - for testing)
-                  vstore16(myselectf16(0, Z5, isless(p2, Z5) && isless(p1, Z5)), 0, ( __global float*)(N + dstPaddedIndex));
+                  //vstore16(z5, 0, ( __global float*)(N + dstPaddedIndex));//DELETE IT, UNCOMMENT BELOW (it just copies magnitude from Sobel to output - for testing)
+                  vstore16(myselectf16(0, z5, isless(p2, z5) && isless(p1, z5)), 0, ( __global float*)(N + dstPaddedIndex));
                   NEXT_ROW;
                   dstIndex += dstXStride;
               }
