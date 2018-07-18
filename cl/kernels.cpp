@@ -369,8 +369,8 @@ cl::Program getCompiledKernels()
 #ifndef NO_FPS
         std::cout << "Building kernels..." << std::endl;
 #endif
-        //progs.build("-cl-opt-disable");
-        progs.build();
+        progs.build("-cl-opt-disable");
+        //progs.build();
     }
     catch (...)
     {
