@@ -244,8 +244,6 @@ cl::Program getCompiledKernels()
         #define pi1  3.14159265f
        __kernel void non_maximum(INP_MEM float16* restrict angles, INP_MEM float16* restrict alignedGMod, __global float16* restrict N)
         {
-
-
               INIT_PADDED;
               float   a = INPUT2[-1];
               float16 b = vload16(0, INPUT2);
@@ -277,21 +275,21 @@ cl::Program getCompiledKernels()
                   int16 atest = 0;
 
                   atest =  islessequal(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
-                  p1 = myselectf16(p1, Z4, atest);
-                  p2 = myselectf16(p2, Z6, atest);
+                  p1 = myselectf16(p1, e, atest);
+                  p2 = myselectf16(p2, e, atest);
 
                   atest =  isless(fabs(angle - pi4), pi8); //45
-                  p1 = myselectf16(p1, Z3, atest);
-                  p2 = myselectf16(p2, Z7, atest);
+                  p1 = myselectf16(p1, e, atest);
+                  p2 = myselectf16(p2, e, atest);
 
                   atest =  islessequal(angle, pi8) || islessequal(fabs(angle - pi1), pi8); //0
-                  p1 = myselectf16(p1, Z2, atest);
-                  p2 = myselectf16(p2, Z8, atest);
+                  p1 = myselectf16(p1, e, atest);
+                  p2 = myselectf16(p2, e, atest);
 
 
                   atest =  isless(fabs(angle - pi34), pi8); //135
-                  p1 = myselectf16(p1, Z1, atest);
-                  p2 = myselectf16(p2, Z9, atest);
+                  p1 = myselectf16(p1, e, atest);
+                  p2 = myselectf16(p2, e, atest);
 
 
 
