@@ -261,9 +261,9 @@ cl::Program getCompiledKernels()
                   angle = myselectf16(angle, angle - pi1, isgreater(angle, pi1));
                   srcIndex += srcXStride;
 
-                  float   g = INPUT2[-1];
-                  float16 h = vload16(0, INPUT2);
-                  float   i = INPUT2[16];
+                  float   g = INPUT[-1];
+                  float16 h = vload16(0, INPUT);
+                  float   i = INPUT[16];
 
         //z1 z2 z3
         //z4 z5 z6
