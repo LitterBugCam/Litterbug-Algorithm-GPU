@@ -235,7 +235,7 @@ cl::Program getCompiledKernels()
 
         //that is not full Canny, it uses pre-processed values from prior SobelAndMagicDetector
         //expecting angle is specially prepared in [0;pi) so we lost left or right, top or bottom, but we don't care here
-        #define INPUT2 (( INP_MEM float*)(alignedGMod + srcIndex))
+        #define INPUT (( INP_MEM float*)(alignedGMod + srcIndex))
 
         #define pi8  0.39269908125f
         #define pi4  0.7853981625f
@@ -245,14 +245,14 @@ cl::Program getCompiledKernels()
        __kernel void non_maximum(INP_MEM float16* restrict angles, INP_MEM float16* restrict alignedGMod, __global float16* restrict N)
         {
               INIT_PADDED;
-              float   a = INPUT2[-1];
-              float16 b = vload16(0, INPUT2);
-              float   c = INPUT2[16];
+              float   a = INPUT[-1];
+              float16 b = vload16(0, INPUT);
+              float   c = INPUT[16];
               srcIndex += srcXStride;
 
-              float   d = INPUT2[-1];
-              float16 e = vload16(0, INPUT2);
-              float   f = INPUT2[16];
+              float   d = INPUT[-1];
+              float16 e = vload16(0, INPUT);
+              float   f = INPUT[16];
 
               for (int k = 0; k < 16; ++k)
               {
@@ -275,21 +275,21 @@ cl::Program getCompiledKernels()
                   int16 atest = 0;
 
                   atest =  islessequal(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
-                  p1 = myselectf16(p1, Z4, atest);
-                  p2 = myselectf16(p2, Z6, atest);
+                  p1 = myselectf16(p1, Z4 + 0, atest);
+                  p2 = myselectf16(p2, Z6 + 0, atest);
 
                   atest =  isless(fabs(angle - pi4), pi8); //45
-                  p1 = myselectf16(p1, Z3, atest);
-                  p2 = myselectf16(p2, Z7, atest);
+                  p1 = myselectf16(p1, Z3 + 0, atest);
+                  p2 = myselectf16(p2, Z7 + 0, atest);
 
                   atest =  islessequal(angle, pi8) || islessequal(fabs(angle - pi1), pi8); //0
-                  p1 = myselectf16(p1, Z2, atest);
-                  p2 = myselectf16(p2, Z8, atest);
+                  p1 = myselectf16(p1, Z2 + 0, atest);
+                  p2 = myselectf16(p2, Z8 + 0, atest);
 
 
                   atest =  isless(fabs(angle - pi34), pi8); //135
-                  p1 = myselectf16(p1, Z1, atest);
-                  p2 = myselectf16(p2, Z9, atest);
+                  p1 = myselectf16(p1, Z1 + 0, atest);
+                  p2 = myselectf16(p2, Z9 + 0, atest);
 
 
 
@@ -299,7 +299,7 @@ cl::Program getCompiledKernels()
                   dstIndex += dstXStride;
               }
         };
-        #undef INPUT2
+        #undef INPUT
 
 
         //that will be 1 pass for speed
@@ -528,10 +528,10 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
         COPYH2D(canny);
         const int kw = gray.cols / 16;
         const int kh = gray.rows / 16;
-        kernel(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s, fore_th, bgray, bangle, bbx, bby, bmapR, bgm).wait();
+        //kernel(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s, fore_th, bgray, bangle, bbx, bby, bmapR, bgm).wait();
 
         //Canny using precalculated values by prior kernel
-        //kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
+        kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
         //kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
 
 
