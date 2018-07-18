@@ -275,21 +275,21 @@ cl::Program getCompiledKernels()
                   int16 atest = 0;
 
                   atest =  islessequal(fabs(angle - pi2), pi8); //90 not sure why, but this works better 90 = up/left
-                  p1 = myselectf16(p1, Z5, atest);
-                  p2 = myselectf16(p2, Z5, atest);
+                  p1 = myselectf16(p1, Z4, atest);
+                  p2 = myselectf16(p2, Z6, atest);
 
                   atest =  isless(fabs(angle - pi4), pi8); //45
-                  p1 = myselectf16(p1, Z5, atest);
-                  p2 = myselectf16(p2, Z5, atest);
+                  p1 = myselectf16(p1, Z3, atest);
+                  p2 = myselectf16(p2, ((float16)(g, h.s0123, h.s456789ab, h.scde)), atest);
 
                   atest =  islessequal(angle, pi8) || islessequal(fabs(angle - pi1), pi8); //0
-                  p1 = myselectf16(p1, Z5, atest);
-                  p2 = myselectf16(p2, Z5, atest);
+                  p1 = myselectf16(p1, Z2, atest);
+                  p2 = myselectf16(p2, h, atest);
 
 
                   atest =  isless(fabs(angle - pi34), pi8); //135
-                  p1 = myselectf16(p1, Z5, atest);
-                  p2 = myselectf16(p2, Z5, atest);
+                  p1 = myselectf16(p1, Z1, atest);
+                  p2 = myselectf16(p2, ((float16)(h.s123, h.s4567, h.s89abcdef, i)), atest);
 
 
 
