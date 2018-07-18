@@ -142,15 +142,15 @@ cl::Program getCompiledKernels()
         //z4 z5 z6
         //z7 z8 z9
 
-        #define Z1 ((float16)(a, b.s0, b.s1, b.s2, b.s3, b.s4, b.s5, b.s6, b.s7, b.s8, b.s9, b.sa, b.sb, b.sc, b.sd, b.se))
+        #define Z1 ((float16)(a, b.s0123, b.s456789ab, b.scde))
         #define Z2 (b)
-        #define Z3 ((float16) (b.s1, b.s2, b.s3, b.s4, b.s5, b.s6, b.s7, b.s8, b.s9, b.sa, b.sb, b.sc, b.sd, b.se, b.sf, c))
-        #define Z4 ((float16)(d, e.s0, e.s1, e.s2, e.s3, e.s4, e.s5, e.s6, e.s7, e.s8, e.s9, e.sa, e.sb, e.sc, e.sd, e.se))
+        #define Z3 ((float16) (b.s123, b.s4567, b.s89abcdef, c))
+        #define Z4 ((float16)(d, e.s0123, e.s456789ab, e.scde))
         #define Z5 (e)
-        #define Z6 ((float16)(e.s1, e.s2, e.s3, e.s4, e.s5, e.s6, e.s7, e.s8, e.s9, e.sa, e.sb, e.sc, e.sd, e.se, e.sf, f))
-        #define Z7 ((float16)(g, h.s0, h.s1, h.s2, h.s3, h.s4, h.s5, h.s6, h.s7, h.s8, h.s9, h.sa, h.sb, h.sc, h.sd, h.se))
+        #define Z6 ((float16)(e.s123, e.s4567, e.s89abcdef, f))
+        #define Z7 ((float16)(g, h.s0123, h.s456789ab, h.scde))
         #define Z8 (h)
-        #define Z9 ((float16)(h.s1, h.s2, h.s3, h.s4, h.s5, h.s6, h.s7, h.s8, h.s9, h.sa, h.sb, h.sc, h.sd, h.se, h.sf, i))
+        #define Z9 ((float16)(h.s123, h.s4567, h.s89abcdef, i))
 
         #define INIT_PADDED uint dstXStride = get_global_size(0); uint dstIndex = 16 * get_global_id(1) * dstXStride + get_global_id(0);uint srcXStride = dstXStride + 2;uint srcIndex = 16 * get_global_id(1) * srcXStride + get_global_id(0) + 1
         #define NEXT_ROW a = d; b = e; c = f; d = g; e = h; f = i
@@ -185,8 +185,8 @@ cl::Program getCompiledKernels()
                 float16 h = convert_float16(vload16(0, INPUT))NORM;
                 float   i = INPUT[16]NORM;
 
-                float16 Gx = (Z7 + 2 * Z8 + Z9) - (Z1 + 2 * Z2 +Z3);
-                float16 Gy = (Z3 + 2 * Z6 + Z9) - (Z1 + 2 * Z4 +Z7);
+                float16 Gx = (Z7 + 2 * Z8 + Z9) - (Z1 + 2 * Z2 + Z3);
+                float16 Gy = (Z3 + 2 * Z6 + Z9) - (Z1 + 2 * Z4 + Z7);
                 float16 an  = myatan2f16(Gy, Gx);
 
                 //prepairing stuff for Canny - result will be gradient with [0; pi) - we dont care if it poinst left or right there
@@ -528,10 +528,10 @@ void openCl::sobel2magic(bool is_minus1, bool is_plus2, bool is_first_run, const
         COPYH2D(canny);
         const int kw = gray.cols / 16;
         const int kh = gray.rows / 16;
-        //kernel(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s, fore_th, bgray, bangle, bbx, bby, bmapR, bgm).wait();
+        kernel(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), (is_minus1) ? 1 : 0, (is_plus2) ? 1 : 0, (is_first_run) ? -1 : 0, alpha_s, fore_th, bgray, bangle, bbx, bby, bmapR, bgm).wait();
 
         //Canny using precalculated values by prior kernel
-        kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
+        //kernel_non_maximum(cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bangle, bgm, bN).wait();
         //kernel_hyst (cl::EnqueueArgs(queue, cl::NDRange(kw, kh), cl::NDRange(gpus)), bN, bcanny).wait();
 
 
