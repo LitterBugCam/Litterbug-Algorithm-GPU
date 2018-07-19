@@ -168,12 +168,12 @@ cl::Program getCompiledKernels()
             const float16 v19 = 19 NORM;
 
 
-            float   a = INPUT[-1]NORM;
+            float   a = *(INPUT - 1)NORM;
             float16 b = convert_float16(vload16(0, INPUT))NORM;
             float   c = INPUT[16]NORM;
             srcIndex += srcXStride;
 
-            float   d = INPUT[-1]NORM;
+            float   d = *(INPUT - 1)NORM;
             float16 e = convert_float16(vload16(0, INPUT))NORM;
             float   f = INPUT[16]NORM;
 
@@ -181,7 +181,7 @@ cl::Program getCompiledKernels()
             {
                 uint dstAlignedIndex = srcIndex; //ok, I hope that is correct, i.e. middle of the matrix is index
                 srcIndex += srcXStride;
-                float   g = INPUT[-1]NORM;
+                float   g = *(INPUT - 1)NORM;
                 float16 h = convert_float16(vload16(0, INPUT))NORM;
                 float   i = INPUT[16]NORM;
 
@@ -245,12 +245,12 @@ cl::Program getCompiledKernels()
        __kernel void non_maximum(INP_MEM float16* restrict angles, INP_MEM float16* restrict alignedGMod, __global float16* restrict N)
         {
               INIT_PADDED;
-              float   a = INPUT[-1];
+              float   a = *(INPUT - 1);
               float16 b = vload16(0, INPUT);
               float   c = INPUT[16];
               srcIndex += srcXStride;
 
-              float   d = INPUT[-1];
+              float   d = *(INPUT - 1);
               float16 e = vload16(0, INPUT);
               float   f = INPUT[16];
 
@@ -261,7 +261,7 @@ cl::Program getCompiledKernels()
                   angle = myselectf16(angle, angle - pi1, isgreater(angle, pi1));
                   srcIndex += srcXStride;
 
-                  float   g = INPUT[-1];
+                  float   g = *(INPUT - 1);
                   float16 h = vload16(0, INPUT);
                   float   i = INPUT[16];
 
@@ -310,12 +310,12 @@ cl::Program getCompiledKernels()
              const float16 T2 = 3.f * T1 NORM;
 
              INIT_PADDED;
-             float   a = INPUT3[-1];
+             float   a = *(INPUT3 - 1);
              float16 b = vload16(0, INPUT3);
              float   c = INPUT3[16];
              srcIndex += srcXStride;
 
-             float   d = INPUT3[-1];
+             float   d = *(INPUT3 - 1);
              float16 e = vload16(0, INPUT3);
              float   f = INPUT3[16];
              int changes = 0;
@@ -327,7 +327,7 @@ cl::Program getCompiledKernels()
                  uint dstPaddedIndex = srcIndex;
                  srcIndex += srcXStride;
 
-                 float   g = INPUT3[-1];
+                 float   g = *(INPUT3 - 1);
                  float16 h = vload16(0, INPUT3);
                  float   i = INPUT3[16];
 
@@ -367,8 +367,8 @@ cl::Program getCompiledKernels()
 #ifndef NO_FPS
         std::cout << "Building kernels..." << std::endl;
 #endif
-        progs.build("-cl-opt-disable");
-        //progs.build();
+        //progs.build("-cl-opt-disable");
+        progs.build();
     }
     catch (...)
     {
